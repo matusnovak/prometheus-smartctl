@@ -1,0 +1,9 @@
+[Unit]
+Description=SMART Prometheus metrics
+
+[Service]
+ExecStart=/var/lib/homelab/smartprom.py
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
