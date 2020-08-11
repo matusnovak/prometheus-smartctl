@@ -1,0 +1,8 @@
+version: '3'
+services:
+  smartctl-metrics:
+    build: ./
+    restart: unless-stopped
+    privileged: true
+    ports:
+      - 9902:9902
