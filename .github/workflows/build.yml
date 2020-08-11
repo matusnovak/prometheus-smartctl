@@ -1,0 +1,25 @@
+name: build
+on:
+  push:
+    branches:
+      - '*'
+    tags:
+      - '*'
+
+jobs:
+  build:
+    name: Docker
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+
+      - name: Build and push Docker images
+          uses: docker/build-push-action@v1
+          with:
+            username: ${{ secrets.DOCKER_USERNAME }}
+            password: ${{ secrets.DOCKER_PASSWORD }}
+            repository: matusnovak/prometheus-smartctl
+            tag_with_ref: true
+            tag_with_sha: true
