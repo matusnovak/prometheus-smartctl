@@ -99,7 +99,7 @@ def main():
     start_time = time.time()
     while True:
         elapsed_time = time.time() - start_time
-        if elapsed_time > 60.0:
+        if elapsed_time > 20.0:
             start_time = time.time()
             collect(metrics)
         time.sleep(0.1)
