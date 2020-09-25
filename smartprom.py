@@ -32,6 +32,8 @@ def run(args: [str]):
 
 
 HEADER = 'ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE'
+METRICS = {}
+LABELS = ['drive']
 
 
 def smart(dev: str) -> List[str]:
@@ -49,62 +51,46 @@ def smart(dev: str) -> List[str]:
         if got_header:
             tokens = result.split()
             if len(tokens) > 3:
-                attributes[tokens[1]] = int(tokens[3])
+                attributes[int(tokens[0])] = (tokens[1], int(tokens[3]))
     return attributes
 
 
-def collect(metrics):
+def collect():
+    global METRICS
+
     for drive in DRIVES:
         try:
+            # Grab all of the attributes that SMART gave us
             attrs = smart(drive)
-            for key, value in attrs.items():
-                if key in metrics:
-                    metrics[key].labels(drive[5:]).set(value)
-        except:
+            for key, values in attrs.items():
+                # Create metric if does not exist
+                if key not in METRICS:
+                    name = values[0].replace('-', '_')
+                    desc = values[0].replace('_', ' ')
+                    num = hex(key)
+                    skey = f'smartprom_{name}'
+                    print(f'Adding new gauge {skey} ({num})')
+                    METRICS[key] = Gauge(skey, f'({num}) {desc}', LABELS)
+
+                # Update metric
+                METRICS[key].labels(drive[5:]).set(values[1])
+        except Exception as e:
+            print(e)
             pass
 
 
 def main():
     start_http_server(9902)
-
-    metrics = {
-        'Raw_Read_Error_Rate': Gauge('smartprom_Raw_Read_Error_Rate', 'Read Error Rate', ['drive']),
-        'Spin_Up_Time': Gauge('smartprom_Spin_Up_Time', 'Spin-Up Time', ['drive']),
-        'Start_Stop_Count': Gauge('smartprom_Start_Stop_Count', 'Start/Stop Count', ['drive']),
-        'Reallocated_Sector_Ct': Gauge('smartprom_Reallocated_Sector_Ct', '     Reallocated Sectors Count', ['drive']),
-        'Seek_Error_Rate': Gauge('smartprom_Seek_Error_Rate', 'Seek Error Rate', ['drive']),
-        'Power_On_Hours': Gauge('smartprom_Power_On_Hours', 'Power-On Hours', ['drive']),
-        'Spin_Retry_Count': Gauge('smartprom_Spin_Retry_Count', 'Spin Retry Count', ['drive']),
-        'Power_Cycle_Count': Gauge('smartprom_Power_Cycle_Count', 'Power Cycle Count', ['drive']),
-        'Runtime_Bad_Block': Gauge('smartprom_Runtime_Bad_Block', 'SATA Downshift Error Count', ['drive']),
-        'End-to-End_Error': Gauge('smartprom_End_Error', 'End-to-End error', ['drive']),
-        'Reported_Uncorrect': Gauge('smartprom_Reported_Uncorrect', 'Reported Uncorrectable Errors', ['drive']),
-        'Command_Timeout': Gauge('smartprom_Command_Timeout', 'Command Timeout', ['drive']),
-        'High_Fly_Writes': Gauge('smartprom_High_Fly_Writes', 'High Fly Writes', ['drive']),
-        'Airflow_Temperature_Cel': Gauge('smartprom_Airflow_Temperature_Cel', 'Airflow Temperature', ['drive']),
-        'G-Sense_Error_Rate': Gauge('smartprom_Sense_Error_Rate', 'G-sense Error Rate', ['drive']),
-        'Power-Off_Retract_Count': Gauge('smartprom_Off_Retract_Count', 'Power-off Retract Count', ['drive']),
-        'Load_Cycle_Count': Gauge('smartprom_Load_Cycle_Count', 'Load Cycle Count', ['drive']),
-        'Temperature_Celsius': Gauge('smartprom_Temperature_Celsius', 'Temperature Celsius', ['drive']),
-        'Hardware_ECC_Recovered': Gauge('smartprom_Hardware_ECC_Recovered', 'Hardware ECC Recovered', ['drive']),
-        'Current_Pending_Sector': Gauge('smartprom_Current_Pending_Sector', 'Current Pending Sector Count', ['drive']),
-        'Offline_Uncorrectable': Gauge('smartprom_Offline_Uncorrectable', 'Uncorrectable Sector Count', ['drive']),
-        'UDMA_CRC_Error_Count': Gauge('smartprom_UDMA_CRC_Error_Count', 'UltraDMA CRC Error Count', ['drive']),
-        'Head_Flying_Hours': Gauge('smartprom_Head_Flying_Hours', 'Head Flying Hours', ['drive']),
-        'Total_LBAs_Written': Gauge('smartprom_Total_LBAs_Written', 'Total LBAs Written', ['drive']),
-        'Total_LBAs_Read': Gauge('smartprom_Total_LBAs_Read', 'Total LBAs Read', ['drive'])
-    }
-    collect(metrics)
+    collect()
 
     start_time = time.time()
     while True:
         elapsed_time = time.time() - start_time
         if elapsed_time > 20.0:
             start_time = time.time()
-            collect(metrics)
+            collect()
         time.sleep(0.1)
 
 
 if __name__ == '__main__':
     main()
-    
