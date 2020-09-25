@@ -68,7 +68,15 @@ def smart(dev: str) -> List[str]:
         if got_header:
             tokens = result.split()
             if len(tokens) > 3:
-                attributes[int(tokens[0])] = (tokens[1], int(tokens[3]))
+                raw = None
+                try:
+                    raw = int(tokens[9])
+                except:
+                    pass
+
+                attributes[tokens[1]] = (int(tokens[0]), int(tokens[3]))
+                if raw:
+                    attributes[f'{tokens[1]}_raw'] = (int(tokens[0]), raw)
     return attributes
 
 
@@ -82,17 +90,19 @@ def collect():
             for key, values in attrs.items():
                 # Create metric if does not exist
                 if key not in METRICS:
-                    name = values[0].replace('-', '_')
-                    desc = values[0].replace('_', ' ')
-                    num = hex(key)
+                    name = key.replace('-', '_')
+                    desc = key.replace('_', ' ')
+                    num = hex(values[0])
                     skey = f'smartprom_{name}'
+                    skey_raw = f'smartprom_{name}_raw'
+
                     print(f'Adding new gauge {skey} ({num})')
                     METRICS[key] = Gauge(skey, f'({num}) {desc}', LABELS)
 
                 # Update metric
                 METRICS[key].labels(drive[5:]).set(values[1])
         except Exception as e:
-            print(e)
+            print('Exception:', e)
             pass
 
 
