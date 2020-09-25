@@ -14,9 +14,6 @@ def isDrive(s: str) -> bool:
     return s.startswith('/dev/sd') and re.match('^/dev/sd[a-z]+$', s)
 
 
-DRIVES = list(filter(lambda d: isDrive(d), glob.glob("/dev/*")))
-
-
 def run(args: [str]):
     # print('Running: {}'.format(' '.join(args)))
     out = subprocess.Popen(args, stdout=subprocess.PIPE,
@@ -31,13 +28,33 @@ def run(args: [str]):
     return stdout.decode("utf-8")
 
 
+def get_types():
+    types = {}
+    results = run(['smartctl', '--scan-open'])
+    for result in results.split('\n'):
+        if not result:
+            continue
+
+        tokens = result.split()
+        if len(tokens) > 3:
+            types[tokens[0]] = tokens[2]
+
+    return types
+
+
+DRIVES = list(filter(lambda d: isDrive(d), glob.glob("/dev/*")))
+TYPES = get_types()
 HEADER = 'ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE'
 METRICS = {}
 LABELS = ['drive']
 
 
 def smart(dev: str) -> List[str]:
-    results = run(['smartctl', '-A', dev])
+    typ = 'sat'
+    if dev in TYPES:
+        typ = TYPES[dev]
+
+    results = run(['smartctl', '-A', '-d', typ, dev])
     attributes = {}
     got_header = False
     for result in results.split('\n'):
