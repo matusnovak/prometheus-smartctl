@@ -6,12 +6,13 @@ import sys
 import re
 import subprocess
 import time
+import json
 from typing import List
 from prometheus_client import start_http_server, Gauge
 
 
 def isDrive(s: str) -> bool:
-    return s.startswith('/dev/sd') and re.match('^/dev/sd[a-z]+$', s)
+    return re.match('^/dev/(sd[a-z]+|nvme[0-9]+)$', s)
 
 
 def run(args: [str]):
@@ -49,12 +50,8 @@ METRICS = {}
 LABELS = ['drive']
 
 
-def smart(dev: str) -> List[str]:
-    typ = 'sat'
-    if dev in TYPES:
-        typ = TYPES[dev]
-
-    results = run(['smartctl', '-A', '-d', typ, dev])
+def smart_sat(dev: str) -> List[str]:
+    results = run(['smartctl', '-A', '-d', 'sat', dev])
     attributes = {}
     got_header = False
     for result in results.split('\n'):
@@ -80,19 +77,45 @@ def smart(dev: str) -> List[str]:
     return attributes
 
 
+def smart_nvme(dev: str) -> List[str]:
+    results = run(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
+    attributes = {}
+
+    health_info = json.loads(results)['nvme_smart_health_information_log']
+    for k, v in health_info.items():
+        if k == 'temperature_sensors':
+            for i, value in enumerate(v, start=1):
+                attributes['temperature_sensor{i}'.format(i=i)] = value
+            continue
+        attributes[k] = v
+
+    return attributes
+
+
 def collect():
     global METRICS
+    global TYPES
 
     for drive in DRIVES:
         try:
             # Grab all of the attributes that SMART gave us
-            attrs = smart(drive)
+            if drive in TYPES:
+                typ = TYPES[drive]
+
+            if typ == 'sat':
+                attrs = smart_sat(drive)
+            if typ == 'nvme':
+                attrs = smart_nvme(drive)
+
             for key, values in attrs.items():
                 # Create metric if does not exist
                 if key not in METRICS:
-                    name = key.replace('-', '_')
+                    name = key.replace('-', '_').replace(' ', '_').replace('.', '')
                     desc = key.replace('_', ' ')
-                    num = hex(values[0])
+                    if typ == 'sat':
+                        num = hex(values[0])
+                    else:
+                        num = hex(values)
                     skey = f'smartprom_{name}'
                     skey_raw = f'smartprom_{name}_raw'
 
@@ -100,7 +123,11 @@ def collect():
                     METRICS[key] = Gauge(skey, f'({num}) {desc}', LABELS)
 
                 # Update metric
-                METRICS[key].labels(drive[5:]).set(values[1])
+                if typ == 'sat':
+                    METRICS[key].labels(drive.replace('/dev/', '')).set(values[1])
+                else:
+                    METRICS[key].labels(drive.replace('/dev/', '')).set(values)
+
         except Exception as e:
             print('Exception:', e)
             pass
