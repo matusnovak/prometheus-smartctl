@@ -104,8 +104,10 @@ def collect():
 
             if typ == 'sat':
                 attrs = smart_sat(drive)
-            if typ == 'nvme':
+            elif typ == 'nvme':
                 attrs = smart_nvme(drive)
+            else:
+                continue
 
             for key, values in attrs.items():
                 # Create metric if does not exist
