@@ -92,6 +92,24 @@ def smart_nvme(dev: str) -> List[str]:
     return attributes
 
 
+def smart_scsi(dev: str) -> List[str]:
+    """
+    Runs the smartctl command on a "scsi" device
+    and processes its attributes
+    """
+    results = run(['smartctl', '-A', '-d', 'scsi', '--json=c', dev])
+    attributes = {}
+    data = json.loads(results)
+    for key, value in data.items():
+        if type(value) == dict:
+            for _label, _value in value.items():
+                if type(_value) == int:
+                    attributes[f"{key}_{_label}"] = _value
+        elif type(value) == int:
+            attributes[key] = value
+    return attributes
+
+
 def collect():
     global METRICS
     global TYPES
@@ -106,6 +124,8 @@ def collect():
                 attrs = smart_sat(drive)
             elif typ == 'nvme':
                 attrs = smart_nvme(drive)
+            elif typ == 'scsi':
+                attrs = smart_scsi(drive)
             else:
                 continue
 
