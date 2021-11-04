@@ -146,7 +146,7 @@ def collect():
             for key, values in attrs.items():
                 # Create metric if does not exist
                 if key not in METRICS:
-                    name = key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_')
+                    name = key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_').lower()
                     desc = key.replace('_', ' ')
                     if typ == 'sat':
                         num = hex(values[0])
