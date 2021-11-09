@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
 
-import glob
-import re
 import subprocess
 import time
 import json
 from typing import List
 from prometheus_client import start_http_server, Gauge
 
-
-def isDrive(s: str) -> bool:
-    """
-    checks if the device string matches an expected disk device name
-    """
-    return re.match('^/dev/(sd[a-z]+|nvme[0-9]+)$', s)
-
-
-def run(args: [str]):
+def run(args: List[str]):
     """
     runs the smartctl command on the system
     """
@@ -32,22 +22,20 @@ def run(args: [str]):
     return stdout.decode("utf-8")
 
 
-def get_types():
-    types = {}
-    results = run(['smartctl', '--scan-open'])
-    for result in results.split('\n'):
-        if not result:
-            continue
+def get_drives():
+    """
+    returns a dictionary of devices and its types
+    """
+    disks = {}
+    results = run(['smartctl', '--scan-open', '--json=c'])
+    devices = json.loads(results)['devices']
+    for device in devices:
+        disks[device["name"]] = device["type"]
+    print("Devices and its types", disks)
+    return disks
 
-        tokens = result.split()
-        if len(tokens) > 3:
-            types[tokens[0]] = tokens[2]
 
-    return types
-
-
-DRIVES = list(filter(lambda d: isDrive(d), glob.glob("/dev/*")))
-TYPES = get_types()
+DRIVES = get_drives()
 HEADER = 'ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE'
 METRICS = {}
 LABELS = ['drive']
@@ -126,14 +114,9 @@ def collect():
     Collect all drive metrics and save them as Gauge type
     """
     global METRICS
-    global TYPES
 
-    for drive in DRIVES:
+    for drive, typ in DRIVES.items():
         try:
-            # Grab all of the attributes that SMART gave us
-            if drive in TYPES:
-                typ = TYPES[drive]
-
             if typ == 'sat':
                 attrs = smart_sat(drive)
             elif typ == 'nvme':
