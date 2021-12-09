@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import glob
-import os
-import sys
 import re
 import subprocess
 import time
