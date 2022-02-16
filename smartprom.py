@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import glob
-import os
-import sys
 import re
 import subprocess
 import time
@@ -119,7 +117,6 @@ def collect():
                     else:
                         num = hex(values)
                     skey = f'smartprom_{name}'
-                    skey_raw = f'smartprom_{name}_raw'
 
                     print(f'Adding new gauge {skey} ({num})')
                     METRICS[key] = Gauge(skey, f'({num}) {desc}', LABELS)
