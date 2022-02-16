@@ -20,7 +20,7 @@ _Note: You don't have to do this if you use the Docker image._
 
 ## Docker usage
 
-No extra configuration needed, should work out of the box. The `privileged: true` is needed because then `smartctl` can't access drvies from the host.
+No extra configuration needed, should work out of the box. The `privileged: true` is required in order for `smartctl` to be able to access drives from the host.
 
 ```yml
 version: '3'
