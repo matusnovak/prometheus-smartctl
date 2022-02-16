@@ -10,11 +10,16 @@ from prometheus_client import start_http_server, Gauge
 
 
 def isDrive(s: str) -> bool:
+    """
+    checks if the device string matches an expected disk device name
+    """
     return re.match('^/dev/(sd[a-z]+|nvme[0-9]+)$', s)
 
 
 def run(args: [str]):
-    # print('Running: {}'.format(' '.join(args)))
+    """
+    runs the smartctl command on the system
+    """
     out = subprocess.Popen(args, stdout=subprocess.PIPE,
                            stderr=subprocess.STDOUT)
     stdout, stderr = out.communicate()
@@ -49,6 +54,10 @@ LABELS = ['drive']
 
 
 def smart_sat(dev: str) -> List[str]:
+    """
+    Runs the smartctl command on a "sat" device
+    and processes its attributes
+    """
     results = run(['smartctl', '-A', '-d', 'sat', dev])
     attributes = {}
     got_header = False
@@ -76,6 +85,10 @@ def smart_sat(dev: str) -> List[str]:
 
 
 def smart_nvme(dev: str) -> List[str]:
+    """
+    Runs the smartctl command on a "nvme" device
+    and processes its attributes
+    """
     results = run(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
     attributes = {}
 
@@ -109,6 +122,9 @@ def smart_scsi(dev: str) -> List[str]:
 
 
 def collect():
+    """
+    Collect all drive metrics and save them as Gauge type
+    """
     global METRICS
     global TYPES
 
@@ -153,6 +169,9 @@ def collect():
 
 
 def main():
+    """
+    starts a server at port 9902 and exposes the metrics
+    """
     start_http_server(9902)
     collect()
 
