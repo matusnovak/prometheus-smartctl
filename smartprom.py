@@ -5,6 +5,7 @@ import re
 import subprocess
 import time
 import json
+import os
 from typing import List
 from prometheus_client import start_http_server, Gauge
 
@@ -172,7 +173,7 @@ def main():
     """
     starts a server at port 9902 and exposes the metrics
     """
-    start_http_server(9902)
+    start_http_server(int(os.environ.get('PORT', 9902)))
     collect()
 
     start_time = time.time()
