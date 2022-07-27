@@ -9,16 +9,15 @@ from prometheus_client import start_http_server, Gauge
 
 def run(args: List[str]):
     """
-    runs the smartctl command on the system
+    Runs the smartctl command on the system
     """
-    out = subprocess.Popen(args, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT)
+    out = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = out.communicate()
 
     if out.returncode != 0:
-        if stderr:
-            print(stderr.decode("utf-8"))
-        raise Exception('Command returned code {}'.format(out.returncode))
+        stdout_msg = stdout.decode('utf-8') if stdout is not None else ''
+        stderr_msg = stderr.decode('utf-8') if stderr is not None else ''
+        raise Exception(f"Command returned code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
 
     return stdout.decode("utf-8")
 
