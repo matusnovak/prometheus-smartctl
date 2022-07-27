@@ -4,7 +4,7 @@
 
 This is a simple exporter for the [Prometheus metrics](https://prometheus.io/) using [smartctl](https://www.smartmontools.org/). The script `smartprom.py` also comes with `smartprom.service` so that you can run this script in the background on your Linux OS via `systemctl`. The script will use port `9902`, you can change it by changing it directly in the script. This script exports all of the data available from the smartctl.
 
-Docker image here: <https://hub.docker.com/r/matusnovak/prometheus-smartctl>
+
 
 ## Install
 
@@ -22,6 +22,11 @@ _Note: You don't have to do this if you use the Docker image._
 
 No extra configuration needed, should work out of the box. The `privileged: true` is required in order for `smartctl` to be able to access drives from the host.
 
+Docker image is here: <https://hub.docker.com/r/matusnovak/prometheus-smartctl>
+
+The architectures supported by this image are: linux/386, linux/amd64, linux/arm/v6, linux/arm/v7, linux/arm64/v8, linux/ppc64le, linux/s390x
+
+Example docker-compose.yml:
 ```yml
 version: '3'
 services:
