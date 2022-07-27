@@ -1,12 +1,17 @@
-FROM alpine:3.12
+FROM python:3.10-alpine3.16
 
 WORKDIR /usr/src
 
-RUN apk update; \
-    apk add --no-cache python3 py3-pip smartmontools; \
-    python3 -m pip install prometheus_client;
+RUN apk add --no-cache smartmontools \
+    && pip install prometheus_client \
+    # remove temporary files
+    && rm -rf /root/.cache/ \
+    && find / -name '*.pyc' -delete
 
-ADD smartprom.py .
+COPY ./smartprom.py /smartprom.py
 
 EXPOSE 9902
-ENTRYPOINT "./smartprom.py"
+ENTRYPOINT ["/usr/local/bin/python", "/smartprom.py"]
+
+# HELP
+# docker build -t matusnovak/prometheus-smartctl:test .
