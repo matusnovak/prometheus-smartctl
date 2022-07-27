@@ -79,7 +79,7 @@ def smart_sat(dev: str) -> List[str]:
                     pass
 
                 attributes[tokens[1]] = (int(tokens[0]), int(tokens[3]))
-                if raw:
+                if raw is not None:
                     attributes[f'{tokens[1]}_raw'] = (int(tokens[0]), raw)
     return attributes
 
