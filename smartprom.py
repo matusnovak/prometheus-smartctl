@@ -27,11 +27,15 @@ def get_drives():
     returns a dictionary of devices and its types
     """
     disks = {}
-    results = run(['smartctl', '--scan-open', '--json=c'])
-    devices = json.loads(results)['devices']
-    for device in devices:
-        disks[device["name"]] = device["type"]
-    print("Devices and its types", disks)
+    result = run(['smartctl', '--scan-open', '--json=c'])
+    result_json = json.loads(result)
+    if 'devices' in result_json:
+        devices = result_json['devices']
+        for device in devices:
+            disks[device["name"]] = device["type"]
+        print("Devices and its types", disks)
+    else:
+        print("No devices found. Make sure you have enough privileges.")
     return disks
 
 
