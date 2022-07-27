@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-
+import os
 import subprocess
 import time
 import json
 from typing import List
 from prometheus_client import start_http_server, Gauge
+
 
 def run(args: List[str]):
     """
@@ -153,9 +154,14 @@ def collect():
 
 def main():
     """
-    starts a server at port 9902 and exposes the metrics
+    Starts a server and exposes the metrics
     """
-    start_http_server(9902)
+    exporter_address = os.environ.get("SMARTCTL_EXPORTER_ADDRESS", "0.0.0.0")
+    exporter_port = int(os.environ.get("SMARTCTL_EXPORTER_PORT", 9902))
+
+    start_http_server(exporter_port, exporter_address)
+    print(f"Server listening in http://{exporter_address}:{exporter_port}/metrics")
+
     collect()
 
     start_time = time.time()
