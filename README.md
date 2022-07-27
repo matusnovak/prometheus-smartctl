@@ -34,3 +34,10 @@ services:
 ```
 
 Your metrics will be available at <http://localhost:9902/metrics>
+
+## Configuration
+
+All configuration is done with environment variables.
+
+- `SMARTCTL_EXPORTER_PORT`: (Optional) The address the exporter should listen on. The default is `9902`.
+- `SMARTCTL_EXPORTER_ADDRESS`: (Optional) The address the exporter should listen on. The default is to listen on all addresses.
