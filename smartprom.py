@@ -157,19 +157,14 @@ def main():
     """
     exporter_address = os.environ.get("SMARTCTL_EXPORTER_ADDRESS", "0.0.0.0")
     exporter_port = int(os.environ.get("SMARTCTL_EXPORTER_PORT", 9902))
+    refresh_interval = int(os.environ.get("SMARTCTL_REFRESH_INTERVAL", 60))
 
     start_http_server(exporter_port, exporter_address)
     print(f"Server listening in http://{exporter_address}:{exporter_port}/metrics")
 
-    collect()
-
-    start_time = time.time()
     while True:
-        elapsed_time = time.time() - start_time
-        if elapsed_time > 20.0:
-            start_time = time.time()
-            collect()
-        time.sleep(0.1)
+        collect()
+        time.sleep(refresh_interval)
 
 
 if __name__ == '__main__':
