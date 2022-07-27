@@ -11,7 +11,7 @@ RUN apk add --no-cache smartmontools \
 COPY ./smartprom.py /smartprom.py
 
 EXPOSE 9902
-ENTRYPOINT ["/usr/local/bin/python", "/smartprom.py"]
+ENTRYPOINT ["/usr/local/bin/python", "-u", "/smartprom.py"]
 
 # HELP
 # docker build -t matusnovak/prometheus-smartctl:test .
