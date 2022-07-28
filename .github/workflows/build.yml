@@ -30,6 +30,7 @@ jobs:
             suffix=
           tags: |
             type=sha
+            type=ref,event=tag
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v1.0.1
