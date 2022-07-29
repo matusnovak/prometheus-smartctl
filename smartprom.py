@@ -131,24 +131,20 @@ def collect():
                 continue
 
             for key, values in attrs.items():
-                # Create metric if does not exist
-                if key not in METRICS:
-                    name = key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_').lower()
-                    desc = key.replace('_', ' ')
-                    if typ == 'sat':
-                        num = hex(values[0])
-                    else:
-                        num = hex(values)
-                    skey = f'smartprom_{name}'
+                # Metric name in lower case
+                metric = 'smartprom_' + key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_')\
+                    .lower()
 
-                    print(f'Adding new gauge {skey} ({num})')
-                    METRICS[key] = Gauge(skey, f'({num}) {desc}', LABELS)
+                # Create metric if it does not exist
+                if metric not in METRICS:
+                    desc = key.replace('_', ' ')
+                    code = hex(values[0]) if typ == 'sat' else hex(values)
+                    print(f'Adding new gauge {metric} ({code})')
+                    METRICS[metric] = Gauge(metric, f'({code}) {desc}', LABELS)
 
                 # Update metric
-                if typ == 'sat':
-                    METRICS[key].labels(drive.replace('/dev/', '')).set(values[1])
-                else:
-                    METRICS[key].labels(drive.replace('/dev/', '')).set(values)
+                metric_val = values[1] if typ == 'sat' else values
+                METRICS[metric].labels(drive.replace('/dev/', '')).set(metric_val)
 
         except Exception as e:
             print('Exception:', e)
