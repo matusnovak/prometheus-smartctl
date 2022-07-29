@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
+import json
 import os
 import subprocess
 import time
-import json
-from typing import List
-from prometheus_client import start_http_server, Gauge
+
+import prometheus_client
+
+DRIVES = {}
+METRICS = {}
+LABELS = ['drive']
 
 
-def run(args: List[str]):
+def run_smartctl_cmd(args: list):
     """
     Runs the smartctl command on the system
     """
@@ -22,12 +26,12 @@ def run(args: List[str]):
     return stdout.decode("utf-8")
 
 
-def get_drives():
+def get_drives() -> dict:
     """
-    returns a dictionary of devices and its types
+    Returns a dictionary of devices and its types
     """
     disks = {}
-    result = run(['smartctl', '--scan-open', '--json=c'])
+    result = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
     if 'devices' in result_json:
         devices = result_json['devices']
@@ -39,68 +43,49 @@ def get_drives():
     return disks
 
 
-DRIVES = get_drives()
-HEADER = 'ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE'
-METRICS = {}
-LABELS = ['drive']
-
-
-def smart_sat(dev: str) -> List[str]:
+def smart_sat(dev: str) -> dict:
     """
     Runs the smartctl command on a "sat" device
     and processes its attributes
     """
-    results = run(['smartctl', '-A', '-d', 'sat', dev])
+    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'sat', '--json=c', dev])
+
     attributes = {}
-    got_header = False
-    for result in results.split('\n'):
-        if not result:
-            continue
-
-        if result == HEADER:
-            got_header = True
-            continue
-
-        if got_header:
-            tokens = result.split()
-            if len(tokens) > 3:
-                raw = None
-                try:
-                    raw = int(tokens[9])
-                except:
-                    pass
-
-                attributes[tokens[1]] = (int(tokens[0]), int(tokens[3]))
-                if raw is not None:
-                    attributes[f'{tokens[1]}_raw'] = (int(tokens[0]), raw)
+    data = json.loads(results)['ata_smart_attributes']['table']
+    for metric in data:
+        code = metric['id']
+        name = metric['name']
+        value = metric['value']
+        value_raw = metric['raw']['value']
+        attributes[name] = (int(code), value)
+        attributes[f'{name}_raw'] = (int(code), value_raw)
     return attributes
 
 
-def smart_nvme(dev: str) -> List[str]:
+def smart_nvme(dev: str) -> dict:
     """
     Runs the smartctl command on a "nvme" device
     and processes its attributes
     """
-    results = run(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
+    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
     attributes = {}
 
-    health_info = json.loads(results)['nvme_smart_health_information_log']
-    for k, v in health_info.items():
-        if k == 'temperature_sensors':
-            for i, value in enumerate(v, start=1):
-                attributes['temperature_sensor{i}'.format(i=i)] = value
-            continue
-        attributes[k] = v
-
+    data = json.loads(results)['nvme_smart_health_information_log']
+    for key, value in data.items():
+        if key == 'temperature_sensors':
+            for i, _value in enumerate(value, start=1):
+                attributes[f'temperature_sensor{i}'] = _value
+        else:
+            attributes[key] = value
     return attributes
 
 
-def smart_scsi(dev: str) -> List[str]:
+def smart_scsi(dev: str) -> dict:
     """
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results = run(['smartctl', '-A', '-d', 'scsi', '--json=c', dev])
+    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'scsi', '--json=c', dev])
     attributes = {}
     data = json.loads(results)
     for key, value in data.items():
@@ -117,7 +102,7 @@ def collect():
     """
     Collect all drive metrics and save them as Gauge type
     """
-    global METRICS
+    global DRIVES, METRICS, LABELS
 
     for drive, typ in DRIVES.items():
         try:
@@ -132,7 +117,7 @@ def collect():
 
             for key, values in attrs.items():
                 # Metric name in lower case
-                metric = 'smartprom_' + key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_')\
+                metric = 'smartprom_' + key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_') \
                     .lower()
 
                 # Create metric if it does not exist
@@ -140,7 +125,7 @@ def collect():
                     desc = key.replace('_', ' ')
                     code = hex(values[0]) if typ == 'sat' else hex(values)
                     print(f'Adding new gauge {metric} ({code})')
-                    METRICS[metric] = Gauge(metric, f'({code}) {desc}', LABELS)
+                    METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
 
                 # Update metric
                 metric_val = values[1] if typ == 'sat' else values
@@ -155,11 +140,18 @@ def main():
     """
     Starts a server and exposes the metrics
     """
+    global DRIVES
+
+    # Validate configuration
     exporter_address = os.environ.get("SMARTCTL_EXPORTER_ADDRESS", "0.0.0.0")
     exporter_port = int(os.environ.get("SMARTCTL_EXPORTER_PORT", 9902))
     refresh_interval = int(os.environ.get("SMARTCTL_REFRESH_INTERVAL", 60))
 
-    start_http_server(exporter_port, exporter_address)
+    # Get drives (test smartctl)
+    DRIVES = get_drives()
+
+    # Start Prometheus server
+    prometheus_client.start_http_server(exporter_port, exporter_address)
     print(f"Server listening in http://{exporter_address}:{exporter_port}/metrics")
 
     while True:
