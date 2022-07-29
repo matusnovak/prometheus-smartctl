@@ -56,9 +56,25 @@ def smart_sat(dev: str) -> dict:
         code = metric['id']
         name = metric['name']
         value = metric['value']
-        value_raw = metric['raw']['value']
+
+        # metric['raw']['value'] contains values difficult to understand for temperatures and time up
+        # that's why we added some logic to parse the string value
+        value_raw = metric['raw']['string']
+        try:
+            # example value_raw: "33" or "43 (Min/Max 39/46)"
+            value_raw = int(value_raw.split()[0])
+        except:
+            # example value_raw: "20071h+27m+15.375s"
+            if 'h+' in value_raw:
+                value_raw = int(value_raw.split('h+')[0])
+            else:
+                print(f"Raw value of sat metric '{name}' can't be parsed. raw_string: {value_raw} "
+                      f"raw_int: {metric['raw']['value']}")
+                value_raw = None
+
         attributes[name] = (int(code), value)
-        attributes[f'{name}_raw'] = (int(code), value_raw)
+        if value_raw is not None:
+            attributes[f'{name}_raw'] = (int(code), value_raw)
     return attributes
 
 
