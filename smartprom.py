@@ -69,7 +69,7 @@ def smart_sat(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {'smart_status_passed': get_smart_status(results)}
+    attributes = {'smart_passed': get_smart_status(results)}
     data = results['ata_smart_attributes']['table']
     for metric in data:
         code = metric['id']
@@ -105,7 +105,7 @@ def smart_nvme(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'nvme', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {'smart_status_passed': get_smart_status(results)}
+    attributes = {'smart_passed': get_smart_status(results)}
     data = results['nvme_smart_health_information_log']
     for key, value in data.items():
         if key == 'temperature_sensors':
@@ -124,7 +124,7 @@ def smart_scsi(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {'smart_status_passed': get_smart_status(results)}
+    attributes = {'smart_passed': get_smart_status(results)}
     for key, value in results.items():
         if type(value) == dict:
             for _label, _value in value.items():
