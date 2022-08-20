@@ -47,11 +47,18 @@ def get_device_info(results: dict) -> dict:
     """
     Returns a dictionary of device info
     """
-    return {
-        'model_family': results.get("model_family", "Unknown"),
-        'model_name': results.get("model_name", "Unknown"),
-        'serial_number': results.get("serial_number", "Unknown")
-    }
+    return {'model_family': results.get("model_family", "Unknown"),
+            'model_name': results.get("model_name", "Unknown"),
+            'serial_number': results.get("serial_number", "Unknown")}
+
+
+def get_smart_status(results: dict) -> int:
+    """
+    Returns a 1, 0 or -1 depends if result from
+    smart status is True, False or unknown.
+    """
+    status = results.get("smart_status")
+    return +(status.get("passed")) if status is not None else -1
 
 
 def smart_sat(dev: str) -> tuple[dict, dict]:
@@ -62,9 +69,7 @@ def smart_sat(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
-    smart_status = results.get("smart_status")
-    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
-
+    attributes = {'smart_status_passed': get_smart_status(results)}
     data = results['ata_smart_attributes']['table']
     for metric in data:
         code = metric['id']
@@ -100,9 +105,7 @@ def smart_nvme(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'nvme', '--json=c', dev])
     results = json.loads(results)
 
-    smart_status = results.get("smart_status")
-    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
-
+    attributes = {'smart_status_passed': get_smart_status(results)}
     data = results['nvme_smart_health_information_log']
     for key, value in data.items():
         if key == 'temperature_sensors':
@@ -121,8 +124,7 @@ def smart_scsi(dev: str) -> tuple[dict, dict]:
     results = run_smartctl_cmd(['smartctl', '-a', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
-    smart_status = results.get("smart_status")
-    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
+    attributes = {'smart_status_passed': get_smart_status(results)}
     for key, value in results.items():
         if type(value) == dict:
             for _label, _value in value.items():
