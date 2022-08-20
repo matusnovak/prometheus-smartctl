@@ -8,7 +8,7 @@ import prometheus_client
 
 DRIVES = {}
 METRICS = {}
-LABELS = ['drive']
+LABELS = ['drive', 'model_family', 'model_name', 'serial_number']
 
 
 def run_smartctl_cmd(args: list):
@@ -43,15 +43,29 @@ def get_drives() -> dict:
     return disks
 
 
-def smart_sat(dev: str) -> dict:
+def get_device_info(results: dict) -> dict:
+    """
+    Returns a dictionary of device info
+    """
+    return {
+        'model_family': results.get("model_family", "Unknown"),
+        'model_name': results.get("model_name", "Unknown"),
+        'serial_number': results.get("serial_number", "Unknown")
+    }
+
+
+def smart_sat(dev: str) -> tuple[dict, dict]:
     """
     Runs the smartctl command on a "sat" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'sat', '--json=c', dev])
+    results = run_smartctl_cmd(['smartctl', '-a', '-d', 'sat', '--json=c', dev])
+    results = json.loads(results)
 
-    attributes = {}
-    data = json.loads(results)['ata_smart_attributes']['table']
+    smart_status = results.get("smart_status")
+    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
+
+    data = results['ata_smart_attributes']['table']
     for metric in data:
         code = metric['id']
         name = metric['name']
@@ -75,43 +89,48 @@ def smart_sat(dev: str) -> dict:
         attributes[name] = (int(code), value)
         if value_raw is not None:
             attributes[f'{name}_raw'] = (int(code), value_raw)
-    return attributes
+    return attributes, get_device_info(results)
 
 
-def smart_nvme(dev: str) -> dict:
+def smart_nvme(dev: str) -> tuple[dict, dict]:
     """
     Runs the smartctl command on a "nvme" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
-    attributes = {}
+    results = run_smartctl_cmd(['smartctl', '-a', '-d', 'nvme', '--json=c', dev])
+    results = json.loads(results)
 
-    data = json.loads(results)['nvme_smart_health_information_log']
+    smart_status = results.get("smart_status")
+    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
+
+    data = results['nvme_smart_health_information_log']
     for key, value in data.items():
         if key == 'temperature_sensors':
             for i, _value in enumerate(value, start=1):
                 attributes[f'temperature_sensor{i}'] = _value
         else:
             attributes[key] = value
-    return attributes
+    return attributes, get_device_info(results)
 
 
-def smart_scsi(dev: str) -> dict:
+def smart_scsi(dev: str) -> tuple[dict, dict]:
     """
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'scsi', '--json=c', dev])
-    attributes = {}
-    data = json.loads(results)
-    for key, value in data.items():
+    results = run_smartctl_cmd(['smartctl', '-a', '-d', 'scsi', '--json=c', dev])
+    results = json.loads(results)
+
+    smart_status = results.get("smart_status")
+    attributes = {'smart_status_passed': +(smart_status.get("passed", -1))}
+    for key, value in results.items():
         if type(value) == dict:
             for _label, _value in value.items():
                 if type(_value) == int:
                     attributes[f"{key}_{_label}"] = _value
         elif type(value) == int:
             attributes[key] = value
-    return attributes
+    return attributes, get_device_info(results)
 
 
 def collect():
@@ -131,7 +150,7 @@ def collect():
             else:
                 continue
 
-            for key, values in attrs.items():
+            for key, values in attrs[0].items():
                 # Metric name in lower case
                 metric = 'smartprom_' + key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_') \
                     .lower()
@@ -139,13 +158,25 @@ def collect():
                 # Create metric if it does not exist
                 if metric not in METRICS:
                     desc = key.replace('_', ' ')
-                    code = hex(values[0]) if typ == 'sat' else hex(values)
+
+                    if type(values) != int and typ == 'sat':
+                        code = hex(values[0])
+                    else:
+                        code = hex(values)
+
                     print(f'Adding new gauge {metric} ({code})')
                     METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
 
                 # Update metric
-                metric_val = values[1] if typ == 'sat' else values
-                METRICS[metric].labels(drive.replace('/dev/', '')).set(metric_val)
+                if type(values) != int and typ == 'sat':
+                    metric_val = values[1]
+                else:
+                    metric_val = values
+
+                METRICS[metric].labels(drive=drive.replace('/dev/', ''),
+                                       model_family=attrs[1]['model_family'],
+                                       model_name=attrs[1]['model_name'],
+                                       serial_number=attrs[1]['serial_number']).set(metric_val)
 
         except Exception as e:
             print('Exception:', e)
