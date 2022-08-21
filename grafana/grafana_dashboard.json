@@ -55,6 +55,232 @@
             "filterable": false,
             "inspect": false
           },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 1,
+                  "text": "ERROR"
+                },
+                "1": {
+                  "index": 2,
+                  "text": "OK"
+                },
+                "-1": {
+                  "index": 0,
+                  "text": "UNKNOWN"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "health"
+            },
+            "properties": [
+              {
+                "id": "custom.displayMode",
+                "value": "color-background"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 38,
+      "links": [],
+      "maxDataPoints": 100,
+      "options": {
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "frameIndex": 1,
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "instance"
+          }
+        ]
+      },
+      "pluginVersion": "9.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fmMKqssGk"
+          },
+          "exemplar": true,
+          "expr": "smartprom_smart_passed",
+          "format": "table",
+          "hide": false,
+          "instant": true,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "title": "SMART Health",
+      "transformations": [
+        {
+          "id": "groupBy",
+          "options": {
+            "fields": {
+              "Value": {
+                "aggregations": [
+                  "last"
+                ],
+                "operation": "aggregate"
+              },
+              "Value #A": {
+                "aggregations": [
+                  "sum"
+                ],
+                "operation": "aggregate"
+              },
+              "Value #B": {
+                "aggregations": [
+                  "sum"
+                ],
+                "operation": "aggregate"
+              },
+              "Value #C": {
+                "aggregations": [
+                  "sum"
+                ],
+                "operation": "aggregate"
+              },
+              "Value #D": {
+                "aggregations": [
+                  "sum"
+                ],
+                "operation": "aggregate"
+              },
+              "Value #E": {
+                "aggregations": [
+                  "sum"
+                ],
+                "operation": "aggregate"
+              },
+              "drive": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "instance": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "model_family": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "model_name": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "serial_number": {
+                "aggregations": [],
+                "operation": "groupby"
+              },
+              "type": {
+                "aggregations": [],
+                "operation": "groupby"
+              }
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": false,
+              "backup_id": true,
+              "backup_type": true,
+              "client_hostname": false,
+              "client_id": true,
+              "client_os_version": true,
+              "client_username": true,
+              "client_version": true,
+              "instance": false,
+              "job": true,
+              "snapshot_id": true
+            },
+            "indexByName": {
+              "Time": 0,
+              "Value #A": 5,
+              "Value #B": 6,
+              "__name__": 1,
+              "drive": 3,
+              "instance": 2,
+              "job": 4
+            },
+            "renameByName": {
+              "Value": "",
+              "Value #A": "reallocated_sector_ct",
+              "Value #A (sum)": "reallocated_sector_ct",
+              "Value #B": "reported_uncorrect",
+              "Value #B (sum)": "reported_uncorrect",
+              "Value #C (sum)": "command_timeout",
+              "Value #D (sum)": "current_pending_sector",
+              "Value #E (sum)": "offline_uncorrectable",
+              "Value (last)": "health",
+              "job": ""
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "fmMKqssGk"
+      },
+      "description": "",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "auto",
+            "displayMode": "auto",
+            "filterable": false,
+            "inspect": false
+          },
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -94,7 +320,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 7
       },
       "id": 27,
       "links": [],
@@ -335,7 +561,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 14
       },
       "id": 37,
       "links": [],
@@ -547,7 +773,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 14
+        "y": 21
       },
       "id": 36,
       "links": [],
@@ -570,12 +796,18 @@
       "pluginVersion": "8.5.0",
       "targets": [
         {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "fmMKqssGk"
+          },
+          "editorMode": "code",
           "exemplar": true,
           "expr": "smartprom_temperature_celsius_raw",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{instance}} // {{drive}}",
+          "legendFormat": "{{instance}} {{drive}}",
+          "range": true,
           "refId": "A"
         }
       ],
@@ -624,6 +856,6 @@
   "timezone": "",
   "title": "SMART Exporter",
   "uid": "hmXXiWPnk",
-  "version": 9,
+  "version": 10,
   "weekStart": ""
 }
