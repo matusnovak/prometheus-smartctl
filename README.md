@@ -27,18 +27,33 @@ Docker image is here: <https://hub.docker.com/r/matusnovak/prometheus-smartctl>
 The architectures supported by this image are: linux/386, linux/amd64, linux/arm/v6, linux/arm/v7, linux/arm64/v8, linux/ppc64le, linux/s390x
 
 Example docker-compose.yml:
+
 ```yml
 version: '3'
 services:
-  smartctl-metrics:
+  smartctl-exporter:
     image: matusnovak/prometheus-smartctl:latest
-    restart: unless-stopped
+    container_name: smartctl-exporter
     privileged: true
     ports:
-      - 9902:9902
+      - "9902:9902"
+    restart: unless-stopped
 ```
 
 Your metrics will be available at <http://localhost:9902/metrics>
+
+The exported metrics looks like these:
+
+```shell
+smartprom_smart_passed{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 1.0
+smartprom_raw_read_error_rate{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 83.0
+smartprom_raw_read_error_rate_raw{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 2.23179896e+08
+smartprom_power_on_hours{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 73.0
+smartprom_power_on_hours_raw{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 24299.0
+smartprom_airflow_temperature_cel{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 60.0
+smartprom_airflow_temperature_cel_raw{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 40.0
+...
+```
 
 ## Configuration
 
@@ -52,4 +67,5 @@ All configuration is done with environment variables.
 
 There is a reference Grafana dashboard in [grafana/grafana_dashboard.json](./grafana/grafana_dashboard.json).
 
-![](./grafana/grafana_dashboard.png)
+![](./grafana/grafana_dashboard_1.png)
+![](./grafana/grafana_dashboard_2.png)
