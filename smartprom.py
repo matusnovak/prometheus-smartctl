@@ -8,7 +8,7 @@ import prometheus_client
 
 DRIVES = {}
 METRICS = {}
-LABELS = ['drive']
+LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
 
 
 def run_smartctl_cmd(args: list):
@@ -36,11 +36,36 @@ def get_drives() -> dict:
     if 'devices' in result_json:
         devices = result_json['devices']
         for device in devices:
-            disks[device["name"]] = device["type"]
-        print("Devices and its types", disks)
+            dev = device["name"]
+            disk_attrs = get_device_info(dev)
+            disk_attrs["type"] = device["type"]
+            disks[dev] = disk_attrs
+            print("Discovered device", dev, "with attributes", disk_attrs)
     else:
         print("No devices found. Make sure you have enough privileges.")
     return disks
+
+
+def get_device_info(dev: str) -> dict:
+    """
+    Returns a dictionary of device info
+    """
+    results = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
+    results = json.loads(results)
+    return {
+        'model_family': results.get("model_family", "Unknown"),
+        'model_name': results.get("model_name", "Unknown"),
+        'serial_number': results.get("serial_number", "Unknown")
+    }
+
+
+def get_smart_status(results: dict) -> int:
+    """
+    Returns a 1, 0 or -1 depending on if result from
+    smart status is True, False or unknown.
+    """
+    status = results.get("smart_status")
+    return +(status.get("passed")) if status is not None else -1
 
 
 def smart_sat(dev: str) -> dict:
@@ -48,10 +73,13 @@ def smart_sat(dev: str) -> dict:
     Runs the smartctl command on a "sat" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'sat', '--json=c', dev])
+    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
+    results = json.loads(results)
 
-    attributes = {}
-    data = json.loads(results)['ata_smart_attributes']['table']
+    attributes = {
+        'smart_passed': (0, get_smart_status(results))
+    }
+    data = results['ata_smart_attributes']['table']
     for metric in data:
         code = metric['id']
         name = metric['name']
@@ -83,10 +111,13 @@ def smart_nvme(dev: str) -> dict:
     Runs the smartctl command on a "nvme" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'nvme', '--json=c', dev])
-    attributes = {}
+    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
+    results = json.loads(results)
 
-    data = json.loads(results)['nvme_smart_health_information_log']
+    attributes = {
+        'smart_passed': get_smart_status(results)
+    }
+    data = results['nvme_smart_health_information_log']
     for key, value in data.items():
         if key == 'temperature_sensors':
             for i, _value in enumerate(value, start=1):
@@ -101,10 +132,13 @@ def smart_scsi(dev: str) -> dict:
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-d', 'scsi', '--json=c', dev])
-    attributes = {}
-    data = json.loads(results)
-    for key, value in data.items():
+    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
+    results = json.loads(results)
+
+    attributes = {
+        'smart_passed': get_smart_status(results)
+    }
+    for key, value in results.items():
         if type(value) == dict:
             for _label, _value in value.items():
                 if type(_value) == int:
@@ -120,7 +154,8 @@ def collect():
     """
     global DRIVES, METRICS, LABELS
 
-    for drive, typ in DRIVES.items():
+    for drive, drive_attrs in DRIVES.items():
+        typ = drive_attrs['type']
         try:
             if typ == 'sat':
                 attrs = smart_sat(drive)
@@ -145,7 +180,12 @@ def collect():
 
                 # Update metric
                 metric_val = values[1] if typ == 'sat' else values
-                METRICS[metric].labels(drive.replace('/dev/', '')).set(metric_val)
+
+                METRICS[metric].labels(drive=drive,
+                                       type=typ,
+                                       model_family=drive_attrs['model_family'],
+                                       model_name=drive_attrs['model_name'],
+                                       serial_number=drive_attrs['serial_number']).set(metric_val)
 
         except Exception as e:
             print('Exception:', e)
