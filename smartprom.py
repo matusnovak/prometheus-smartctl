@@ -175,7 +175,6 @@ def collect():
                 if metric not in METRICS:
                     desc = key.replace('_', ' ')
                     code = hex(values[0]) if typ == 'sat' else hex(values)
-
                     print(f'Adding new gauge {metric} ({code})')
                     METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
 
