@@ -21,7 +21,7 @@ def run_smartctl_cmd(args: list):
     if out.returncode != 0:
         stdout_msg = stdout.decode('utf-8') if stdout is not None else ''
         stderr_msg = stderr.decode('utf-8') if stderr is not None else ''
-        raise Exception(f"Command returned code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
+        print(f"Command returned code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
 
     return stdout.decode("utf-8")
 
