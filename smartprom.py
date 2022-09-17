@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+from typing import Tuple
 
 import prometheus_client
 
@@ -11,19 +12,22 @@ METRICS = {}
 LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
 
 
-def run_smartctl_cmd(args: list):
+def run_smartctl_cmd(args: list) -> Tuple[str, int]:
     """
     Runs the smartctl command on the system
     """
     out = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     stdout, stderr = out.communicate()
 
+    # exit code can be != 0 even if the command returned valid data
+    # see EXIT STATUS in
+    # https://www.smartmontools.org/browser/trunk/smartmontools/smartctl.8.in
     if out.returncode != 0:
         stdout_msg = stdout.decode('utf-8') if stdout is not None else ''
         stderr_msg = stderr.decode('utf-8') if stderr is not None else ''
-        raise Exception(f"Command returned code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
+        print(f"WARNING: Command returned exit code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
 
-    return stdout.decode("utf-8")
+    return stdout.decode("utf-8"), out.returncode
 
 
 def get_drives() -> dict:
@@ -31,7 +35,7 @@ def get_drives() -> dict:
     Returns a dictionary of devices and its types
     """
     disks = {}
-    result = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
+    result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
     if 'devices' in result_json:
         devices = result_json['devices']
@@ -50,7 +54,7 @@ def get_device_info(dev: str) -> dict:
     """
     Returns a dictionary of device info
     """
-    results = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
+    results, _ = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
     results = json.loads(results)
     return {
         'model_family': results.get("model_family", "Unknown"),
@@ -73,11 +77,12 @@ def smart_sat(dev: str) -> dict:
     Runs the smartctl command on a "sat" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
-        'smart_passed': (0, get_smart_status(results))
+        'smart_passed': (0, get_smart_status(results)),
+        'exit_code': (0, exit_code)
     }
     data = results['ata_smart_attributes']['table']
     for metric in data:
@@ -111,11 +116,12 @@ def smart_nvme(dev: str) -> dict:
     Runs the smartctl command on a "nvme" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
-        'smart_passed': get_smart_status(results)
+        'smart_passed': get_smart_status(results),
+        'exit_code': exit_code
     }
     data = results['nvme_smart_health_information_log']
     for key, value in data.items():
@@ -132,11 +138,12 @@ def smart_scsi(dev: str) -> dict:
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
-        'smart_passed': get_smart_status(results)
+        'smart_passed': get_smart_status(results),
+        'exit_code': exit_code
     }
     for key, value in results.items():
         if type(value) == dict:
