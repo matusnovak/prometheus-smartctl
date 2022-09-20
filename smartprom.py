@@ -7,9 +7,14 @@ from typing import Tuple
 
 import prometheus_client
 
+LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
 DRIVES = {}
 METRICS = {}
-LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
+
+# https://www.smartmontools.org/wiki/USB
+SAT_TYPES = ['sat', 'usbjmicron', 'usbprolific', 'usbsunplus']
+NVME_TYPES = ['nvme', 'sntasmedia', 'sntjmicron', 'sntrealtek']
+SCSI_TYPES = ['scsi']
 
 
 def run_smartctl_cmd(args: list) -> Tuple[str, int]:
@@ -159,16 +164,16 @@ def collect():
     """
     Collect all drive metrics and save them as Gauge type
     """
-    global DRIVES, METRICS, LABELS
+    global LABELS, DRIVES, METRICS, SAT_TYPES, NVME_TYPES, SCSI_TYPES
 
     for drive, drive_attrs in DRIVES.items():
         typ = drive_attrs['type']
         try:
-            if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus':
+            if typ in SAT_TYPES:
                 attrs = smart_sat(drive)
-            elif typ == 'nvme' or typ == 'sntasmedia' or typ == 'sntjmicron' or typ == 'sntrealtek':
+            elif typ in NVME_TYPES:
                 attrs = smart_nvme(drive)
-            elif typ == 'scsi':
+            elif typ in SCSI_TYPES:
                 attrs = smart_scsi(drive)
             else:
                 continue
@@ -181,12 +186,12 @@ def collect():
                 # Create metric if it does not exist
                 if metric not in METRICS:
                     desc = key.replace('_', ' ')
-                    code = hex(values[0]) if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus' else hex(values)
+                    code = hex(values[0]) if typ in SAT_TYPES else hex(values)
                     print(f'Adding new gauge {metric} ({code})')
                     METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
 
                 # Update metric
-                metric_val = values[1] if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus' else values
+                metric_val = values[1] if typ in SAT_TYPES else values
 
                 METRICS[metric].labels(drive=drive,
                                        type=typ,
