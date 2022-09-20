@@ -74,7 +74,7 @@ def get_smart_status(results: dict) -> int:
 
 def smart_sat(dev: str) -> dict:
     """
-    Runs the smartctl command on a "sat" device
+    Runs the smartctl command on a internal or external "sat" device
     and processes its attributes
     """
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
@@ -113,7 +113,7 @@ def smart_sat(dev: str) -> dict:
 
 def smart_nvme(dev: str) -> dict:
     """
-    Runs the smartctl command on a "nvme" device
+    Runs the smartctl command on a internal or external "nvme" device
     and processes its attributes
     """
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
@@ -164,9 +164,9 @@ def collect():
     for drive, drive_attrs in DRIVES.items():
         typ = drive_attrs['type']
         try:
-            if typ == 'sat':
+            if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus':
                 attrs = smart_sat(drive)
-            elif typ == 'nvme':
+            elif typ == 'nvme' or typ == 'sntasmedia' or typ == 'sntjmicron' or typ == 'sntrealtek':
                 attrs = smart_nvme(drive)
             elif typ == 'scsi':
                 attrs = smart_scsi(drive)
@@ -181,12 +181,12 @@ def collect():
                 # Create metric if it does not exist
                 if metric not in METRICS:
                     desc = key.replace('_', ' ')
-                    code = hex(values[0]) if typ == 'sat' else hex(values)
+                    code = hex(values[0]) if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus' else hex(values)
                     print(f'Adding new gauge {metric} ({code})')
                     METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
 
                 # Update metric
-                metric_val = values[1] if typ == 'sat' else values
+                metric_val = values[1] if typ == 'sat' or typ == 'usbjmicron' or typ == 'usbprolific' or typ == 'usbsunplus' else values
 
                 METRICS[metric].labels(drive=drive,
                                        type=typ,
