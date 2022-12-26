@@ -2,6 +2,10 @@
 Description=SMART Prometheus metrics
 
 [Service]
+#To run the http server part of this service as non-root, you
+#can specify another user here. Create it using e.g.
+#"useradd -r prometheus_smart_mon"
+#Environment="SMARTCTL_EXPORTER_USER=prometheus_smart_mon"
 ExecStart=/var/lib/homelab/smartprom.py
 Restart=always
 

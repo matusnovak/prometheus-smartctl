@@ -13,10 +13,11 @@ _Note: You don't have to do this if you use the Docker image._
 1. Copy the `smartprom.service` file into `/etc/systemd/system` folder.
 2. Copy the `smartprom.py` file anywhere into your system.
 3. Modify `ExecStart=` in the `smartprom.service` so that it points to `smartprom.py` in your system.
-4. Run `chmod +x smartprom.py` 
-5. Install `prometheus_client` for the root user, example: `sudo -H python3 -m pip install prometheus_client`
-6. Run `systemctl enable smartprom` and `systemctl start smartprom`
-7. Your metrics will now be available at `http://localhost:9902`
+4. Optionally create a user and modify `smartprom.service` to set `SMARTCTL_EXPORTER_USER` to that user.
+5. Run `chmod +x smartprom.py`
+6. Install `prometheus_client` for the root user, example: `sudo -H python3 -m pip install prometheus_client`
+7. Run `systemctl enable smartprom` and `systemctl start smartprom`
+8. Your metrics will now be available at `http://localhost:9902`
 
 ## Docker usage
 
@@ -63,6 +64,7 @@ All configuration is done with environment variables.
 - `SMARTCTL_REFRESH_INTERVAL`: (Optional) The refresh interval of the metrics. A larger value reduces CPU usage. The default is `60` seconds.
 - `SMARTCTL_EXPORTER_PORT`: (Optional) The address the exporter should listen on. The default is `9902`.
 - `SMARTCTL_EXPORTER_ADDRESS`: (Optional) The address the exporter should listen on. The default is to listen on all addresses.
+- `SMARTCTL_EXPORTER_USER`: (Optional) If specified, the process forks and runs smartctl as root, but runs the http server and most of the processing as the specified user for security reasons. This user must have been created beforehand, e.g. by `useradd -r prometheus_smart_mon`.
 
 ## Grafana dashboard
 

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 import json
+import multiprocessing
+import multiprocessing.connection
 import os
+import pwd
 import subprocess
 import time
+from abc import ABC, abstractmethod
 from typing import Tuple
 
 import prometheus_client
@@ -15,6 +19,44 @@ METRICS = {}
 SAT_TYPES = ['sat', 'usbjmicron', 'usbprolific', 'usbsunplus']
 NVME_TYPES = ['nvme', 'sntasmedia', 'sntjmicron', 'sntrealtek']
 SCSI_TYPES = ['scsi']
+
+
+class SmartctlRunner(ABC):
+    @abstractmethod
+    def run(self, args: list) -> Tuple[str, int]:
+        pass
+
+
+class RemoteSmartctlRunner(SmartctlRunner):
+    """
+    Sends the arguments to the parent process, and waits
+    for the parent process to run smartctl and send the
+    output back.
+    """
+
+    def __init__(self, connection):
+        self.connection = connection
+
+    def run(self, args: list) -> Tuple[str, int]:
+        self.connection.send(args)
+        return self.connection.recv()
+
+
+class LocalSmartctlRunner(SmartctlRunner):
+    """
+    Run smartctl and returns the result.
+    """
+    def run(self, args: list) -> Tuple[str, int]:
+        return run_smartctl_cmd(args)
+
+
+def demote(user: str):
+    """
+    Change this process to run as user.
+    """
+    user_info = pwd.getpwnam(user)
+    os.setgid(user_info.pw_gid)
+    os.setuid(user_info.pw_uid)
 
 
 def run_smartctl_cmd(args: list) -> Tuple[str, int]:
@@ -35,18 +77,18 @@ def run_smartctl_cmd(args: list) -> Tuple[str, int]:
     return stdout.decode("utf-8"), out.returncode
 
 
-def get_drives() -> dict:
+def get_drives(smartctl_runner: SmartctlRunner) -> dict:
     """
     Returns a dictionary of devices and its types
     """
     disks = {}
-    result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
+    result, _ = smartctl_runner.run(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
     if 'devices' in result_json:
         devices = result_json['devices']
         for device in devices:
             dev = device["name"]
-            disk_attrs = get_device_info(dev)
+            disk_attrs = get_device_info(smartctl_runner, dev)
             disk_attrs["type"] = device["type"]
             disks[dev] = disk_attrs
             print("Discovered device", dev, "with attributes", disk_attrs)
@@ -55,11 +97,11 @@ def get_drives() -> dict:
     return disks
 
 
-def get_device_info(dev: str) -> dict:
+def get_device_info(smartctl_runner: SmartctlRunner, dev: str) -> dict:
     """
     Returns a dictionary of device info
     """
-    results, _ = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
+    results, _ = smartctl_runner.run(['smartctl', '-i', '--json=c', dev])
     results = json.loads(results)
     return {
         'model_family': results.get("model_family", "Unknown"),
@@ -77,12 +119,12 @@ def get_smart_status(results: dict) -> int:
     return +(status.get("passed")) if status is not None else -1
 
 
-def smart_sat(dev: str) -> dict:
+def smart_sat(smartctl_runner: SmartctlRunner, dev: str) -> dict:
     """
     Runs the smartctl command on a internal or external "sat" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
+    results, exit_code = smartctl_runner.run(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
@@ -116,12 +158,12 @@ def smart_sat(dev: str) -> dict:
     return attributes
 
 
-def smart_nvme(dev: str) -> dict:
+def smart_nvme(smartctl_runner: SmartctlRunner, dev: str) -> dict:
     """
     Runs the smartctl command on a internal or external "nvme" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
+    results, exit_code = smartctl_runner.run(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
@@ -138,12 +180,12 @@ def smart_nvme(dev: str) -> dict:
     return attributes
 
 
-def smart_scsi(dev: str) -> dict:
+def smart_scsi(smartctl_runner: SmartctlRunner, dev: str) -> dict:
     """
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
+    results, exit_code = smartctl_runner.run(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
     attributes = {
@@ -160,7 +202,7 @@ def smart_scsi(dev: str) -> dict:
     return attributes
 
 
-def collect():
+def collect(smartctl_runner: SmartctlRunner):
     """
     Collect all drive metrics and save them as Gauge type
     """
@@ -170,11 +212,11 @@ def collect():
         typ = drive_attrs['type']
         try:
             if typ in SAT_TYPES:
-                attrs = smart_sat(drive)
+                attrs = smart_sat(smartctl_runner, drive)
             elif typ in NVME_TYPES:
-                attrs = smart_nvme(drive)
+                attrs = smart_nvme(smartctl_runner, drive)
             elif typ in SCSI_TYPES:
-                attrs = smart_scsi(drive)
+                attrs = smart_scsi(smartctl_runner, drive)
             else:
                 continue
 
@@ -204,7 +246,17 @@ def collect():
             pass
 
 
-def main():
+def child_target(connection: multiprocessing.connection.Connection, run_as_user: str):
+    """
+    Demote to non-root user and start server with main loop
+    """
+    with connection as connection:
+        demote(run_as_user)
+        smartctl_runner = RemoteSmartctlRunner(connection)
+        start_server(smartctl_runner)
+
+
+def start_server(smartctl_runner: SmartctlRunner):
     """
     Starts a server and exposes the metrics
     """
@@ -216,15 +268,32 @@ def main():
     refresh_interval = int(os.environ.get("SMARTCTL_REFRESH_INTERVAL", 60))
 
     # Get drives (test smartctl)
-    DRIVES = get_drives()
+    DRIVES = get_drives(smartctl_runner)
 
     # Start Prometheus server
     prometheus_client.start_http_server(exporter_port, exporter_address)
     print(f"Server listening in http://{exporter_address}:{exporter_port}/metrics")
 
     while True:
-        collect()
+        collect(smartctl_runner)
         time.sleep(refresh_interval)
+
+
+def main():
+    run_as_user = os.environ.get("SMARTCTL_EXPORTER_USER")
+    if run_as_user:
+        print(f"Configured to run as user {run_as_user}")
+        parent_connection, child_connection = multiprocessing.Pipe()
+        process = multiprocessing.Process(target=child_target, args=(child_connection, run_as_user))
+        process.start()
+        with parent_connection as connection:
+            while True:
+                args = connection.recv()
+                result = run_smartctl_cmd(args)
+                connection.send(result)
+    else:
+        runner = LocalSmartctlRunner()
+        start_server(runner)
 
 
 if __name__ == '__main__':
