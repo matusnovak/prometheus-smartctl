@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import time
+import re
 from typing import Tuple
 
 import prometheus_client
@@ -15,6 +16,7 @@ METRICS = {}
 SAT_TYPES = ['sat', 'usbjmicron', 'usbprolific', 'usbsunplus']
 NVME_TYPES = ['nvme', 'sntasmedia', 'sntjmicron', 'sntrealtek']
 SCSI_TYPES = ['scsi']
+MEGARAID_TYPE_PATTERN = r"(sat\+)?(megaraid,\d+)"
 
 
 def run_smartctl_cmd(args: list) -> Tuple[str, int]:
@@ -42,12 +44,32 @@ def get_drives() -> dict:
     disks = {}
     result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
+
+    # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
+    result_json["devices"] = list(
+        filter(lambda x: "open_error" not in x, result_json["devices"])
+    )
+
     if 'devices' in result_json:
         devices = result_json['devices']
         for device in devices:
             dev = device["name"]
-            disk_attrs = get_device_info(dev)
-            disk_attrs["type"] = device["type"]
+            if re.match(MEGARAID_TYPE_PATTERN, device["type"]):
+                # If drive is connected by MegaRAID, dev has a bus name like "/dev/bus/0".
+                # After retrieving the disk information using the bus name,
+                # replace dev with a disk ID such as "megaraid,0".
+                bus_name = dev
+                disk_attrs = get_megaraid_device_info(device["type"], bus_name)
+                disk_attrs["bus_device"] = bus_name
+                disk_attrs["megaraid_id"] = get_megaraid_device_id(device["type"])
+                dev = disk_attrs["megaraid_id"]
+
+                # Generate device["type"] from device["protocol"]
+                # because device["type"] contains strings such as "sat+megaraid,2" or "megaraid,4".
+                disk_attrs["type"] = "sat" if device["protocol"] == "ATA" else "scsi"
+            else:
+                disk_attrs = get_device_info(dev)
+                disk_attrs["type"] = device["type"]
             disks[dev] = disk_attrs
             print("Discovered device", dev, "with attributes", disk_attrs)
     else:
@@ -68,6 +90,48 @@ def get_device_info(dev: str) -> dict:
     }
 
 
+def get_megaraid_device_info(typ: str, dev: str) -> dict:
+    """
+    Get device information connected with MegaRAID,
+    and process the information into get_device_info compatible format.
+    """
+    megaraid_id = get_megaraid_device_id(typ)
+    if megaraid_id is None:
+        return {}
+
+    results, _ = run_smartctl_cmd(
+        ["smartctl", "-i", "--json=c", "-d", megaraid_id, dev]
+    )
+    results = json.loads(results)
+    serial_number = results.get("serial_number", "Unknown")
+    model_family = results.get("model_family", "Unknown")
+
+    # When using SAS drive and smartmontools r5286 and later,
+    # scsi_ prefix is added to model_name field.
+    # https://sourceforge.net/p/smartmontools/code/5286/
+    model_name = results.get(
+        "scsi_model_name",
+        results.get("model_name", "Unknown"),
+    )
+
+    return {
+        "model_family": model_family,
+        "model_name": model_name,
+        "serial_number": serial_number,
+    }
+
+
+def get_megaraid_device_id(typ: str) -> str | None:
+    """
+    Returns the device ID on the MegaRAID from the typ string
+    """
+    megaraid_match = re.search(MEGARAID_TYPE_PATTERN, typ)
+    if not megaraid_match:
+        return None
+
+    return megaraid_match.group(2)
+
+
 def get_smart_status(results: dict) -> int:
     """
     Returns a 1, 0 or -1 depending on if result from
@@ -85,11 +149,18 @@ def smart_sat(dev: str) -> dict:
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {
-        'smart_passed': (0, get_smart_status(results)),
-        'exit_code': (0, exit_code)
-    }
-    data = results['ata_smart_attributes']['table']
+    attributes = table_to_attributes_sat(results["ata_smart_attributes"]["table"])
+    attributes["smart_passed"] = (0, get_smart_status(results))
+    attributes["exit_code"] = (0, exit_code)
+    return attributes
+
+
+def table_to_attributes_sat(data: dict) -> dict:
+    """
+    Returns a results["ata_smart_attributes"]["table"]
+    processed into an attributes dict
+    """
+    attributes = {}
     for metric in data:
         code = metric['id']
         name = metric['name']
@@ -146,11 +217,19 @@ def smart_scsi(dev: str) -> dict:
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {
-        'smart_passed': get_smart_status(results),
-        'exit_code': exit_code
-    }
-    for key, value in results.items():
+    attributes = results_to_attributes_scsi(results)
+    attributes["smart_passed"] = get_smart_status(results)
+    attributes["exit_code"] = exit_code
+    return attributes
+
+
+def results_to_attributes_scsi(data: dict) -> dict:
+    """
+    Returns the result of smartctl -i on the SCSI device
+    processed into an attributes dict
+    """
+    attributes = {}
+    for key, value in data.items():
         if type(value) == dict:
             for _label, _value in value.items():
                 if type(_value) == int:
@@ -158,6 +237,32 @@ def smart_scsi(dev: str) -> dict:
         elif type(value) == int:
             attributes[key] = value
     return attributes
+
+
+def smart_megaraid(megaraid_id: str, dev: str) -> dict:
+    """
+    Runs the smartctl command on device connected by MegaRAID
+    and processes its attributes
+    """
+    results, exit_code = run_smartctl_cmd(
+        ["smartctl", "-A", "-H", "-d", megaraid_id, "--json=c", dev]
+    )
+    results = json.loads(results)
+
+    if results["device"]["protocol"] == "ATA":
+        # SATA device on MegaRAID
+        data = results["ata_smart_attributes"]["table"]
+        attributes = table_to_attributes_sat(data)
+        attributes["smart_passed"] = (0, get_smart_status(results))
+        attributes["exit_code"] = (0, exit_code)
+        return attributes
+    elif results["device"]["protocol"] == "SCSI":
+        # SAS device on MegaRAID
+        attributes = results_to_attributes_scsi(results)
+        attributes["smart_passed"] = get_smart_status(results)
+        attributes["exit_code"] = exit_code
+        return attributes
+    return {}
 
 
 def collect():
@@ -169,7 +274,11 @@ def collect():
     for drive, drive_attrs in DRIVES.items():
         typ = drive_attrs['type']
         try:
-            if typ in SAT_TYPES:
+            if "megaraid_id" in drive_attrs:
+                attrs = smart_megaraid(
+                    drive_attrs["megaraid_id"], drive_attrs["bus_device"]
+                )
+            elif typ in SAT_TYPES:
                 attrs = smart_sat(drive)
             elif typ in NVME_TYPES:
                 attrs = smart_nvme(drive)
