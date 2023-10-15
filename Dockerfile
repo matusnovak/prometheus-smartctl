@@ -8,7 +8,7 @@ RUN apk add --no-cache smartmontools \
     && rm -rf /root/.cache/ \
     && find / -name '*.pyc' -delete
 
-COPY ./smartprom.py /smartprom.py
+COPY ./smartprom.py /megaraid.py /
 
 EXPOSE 9902
 ENTRYPOINT ["/usr/local/bin/python", "-u", "/smartprom.py"]
