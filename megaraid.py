@@ -37,6 +37,21 @@ def get_megaraid_device_info(dev: str, typ: str) -> dict:
     }
 
 
+def get_megaraid_device_type(dev: str, typ: str) -> str:
+    megaraid_id = get_megaraid_device_id(typ)
+    if megaraid_id is None:
+        return "unknown"
+
+    results, _ = smartprom.run_smartctl_cmd(
+        ["smartctl", "-i", "--json=c", "-d", megaraid_id, dev]
+    )
+    results = json.loads(results)
+
+    if "device" not in results or "protocol" not in results["device"]:
+        return "unknown"
+    return "sat" if results["device"]["protocol"] == "ATA" else "scsi"
+
+
 def get_megaraid_device_id(typ: str) -> str | None:
     """
     Returns the device ID on the MegaRAID from the typ string

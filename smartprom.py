@@ -66,13 +66,10 @@ def get_drives() -> dict:
                 # After retrieving the disk information using the bus name,
                 # replace dev with a disk ID such as "megaraid,0".
                 disk_attrs = megaraid.get_megaraid_device_info(dev, device["type"])
+                disk_attrs["type"] = megaraid.get_megaraid_device_type(dev, device["type"])
                 disk_attrs["bus_device"] = dev
                 disk_attrs["megaraid_id"] = megaraid.get_megaraid_device_id(device["type"])
                 dev = disk_attrs["megaraid_id"]
-
-                # Generate device["type"] from device["protocol"]
-                # because device["type"] contains strings such as "sat+megaraid,2" or "megaraid,4".
-                disk_attrs["type"] = "sat" if device["protocol"] == "ATA" else "scsi"
             else:
                 disk_attrs = get_device_info(dev)
                 disk_attrs["type"] = device["type"]
