@@ -47,7 +47,13 @@ def get_drives() -> dict:
 
     # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
     result_json["devices"] = list(
-        filter(lambda x: "open_error" not in x, result_json["devices"])
+        filter(
+            lambda x: (
+                x.get("open_error", "")
+                != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
+            ),
+            result_json["devices"],
+        )
     )
 
     if 'devices' in result_json:
