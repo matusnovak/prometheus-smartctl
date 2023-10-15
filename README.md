@@ -13,7 +13,7 @@ _Note: You don't have to do this if you use the Docker image._
 1. Copy the `smartprom.service` file into `/etc/systemd/system` folder.
 2. Copy the `smartprom.py` file anywhere into your system.
 3. Modify `ExecStart=` in the `smartprom.service` so that it points to `smartprom.py` in your system.
-4. Run `chmod +x smartprom.py` 
+4. Run `chmod +x smartprom.py`
 5. Install `prometheus_client` for the root user, example: `sudo -H python3 -m pip install prometheus_client`
 6. Run `systemctl enable smartprom` and `systemctl start smartprom`
 7. Your metrics will now be available at `http://localhost:9902`
@@ -54,6 +54,13 @@ smartprom_power_on_hours_raw{drive="/dev/sda",model_family="Seagate BarraCuda 3.
 smartprom_airflow_temperature_cel{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 60.0
 smartprom_airflow_temperature_cel_raw{drive="/dev/sda",model_family="Seagate BarraCuda 3.5 (SMR)",model_name="ST6000DM003-2CY296",serial_number="WCT362XM",type="sat"} 40.0
 ...
+```
+
+If you are using a MegaRAID card to connect the drives, the metrics will export look like these:
+
+```shell
+smartprom_power_on_hours_raw{drive="megaraid,0",model_family="Western Digital Ultrastar He10/12",model_name="WDC WD80EMAZ-00M9AA0",serial_number="XXXXXXXX",type="sat"} 28522.0
+smartprom_power_on_time_hours{drive="megaraid,1",model_family="Unknown",model_name="HGST HUH728080AL5200",serial_number="XXXXXXXX",type="scsi"} 37341.0
 ```
 
 ## Configuration
