@@ -46,19 +46,20 @@ def get_drives() -> dict:
     result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
 
-    # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
-    result_json["devices"] = list(
-        filter(
-            lambda x: (
-                x.get("open_error", "")
-                != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
-            ),
-            result_json["devices"],
-        )
-    )
-
     if 'devices' in result_json:
         devices = result_json['devices']
+
+        # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
+        devices = list(
+            filter(
+                lambda x: (
+                        x.get("open_error", "")
+                        != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
+                ),
+                devices,
+            )
+        )
+
         for device in devices:
             dev = device["name"]
             if re.match(megaraid.MEGARAID_TYPE_PATTERN, device["type"]):
