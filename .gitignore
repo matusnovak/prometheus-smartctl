@@ -166,3 +166,6 @@ zsdoc/data
 !/tests/_output/.gitkeep
 
 # End of https://www.toptal.com/developers/gitignore/api/vim,zsh,visualstudiocode,pycharm+all
+
+# Python cache
+__pycache__
