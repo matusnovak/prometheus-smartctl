@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.3.0 (20/01/2024)
+
+* Add support for drives connected by MegaRAID
+* Add user_capacity label (disk size in bytes) for each device
+* Update prometheus-client 0.19.0
+* Update Python 3.12
+* Update base Docker image to Alpine 3.19
+
 ## v2.2.0 (20/09/2022)
 
 * Add support for USB bridged drives
