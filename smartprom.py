@@ -10,14 +10,21 @@ import prometheus_client
 
 import megaraid
 
-LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number', 'user_capacity']
+LABELS = [
+    "drive",
+    "type",
+    "model_family",
+    "model_name",
+    "serial_number",
+    "user_capacity",
+]
 DRIVES = {}
 METRICS = {}
 
 # https://www.smartmontools.org/wiki/USB
-SAT_TYPES = ['sat', 'usbjmicron', 'usbprolific', 'usbsunplus']
-NVME_TYPES = ['nvme', 'sntasmedia', 'sntjmicron', 'sntrealtek']
-SCSI_TYPES = ['scsi']
+SAT_TYPES = ["sat", "usbjmicron", "usbprolific", "usbsunplus"]
+NVME_TYPES = ["nvme", "sntasmedia", "sntjmicron", "sntrealtek"]
+SCSI_TYPES = ["scsi"]
 
 
 def run_smartctl_cmd(args: list) -> Tuple[str, int]:
@@ -31,9 +38,12 @@ def run_smartctl_cmd(args: list) -> Tuple[str, int]:
     # see EXIT STATUS in
     # https://www.smartmontools.org/browser/trunk/smartmontools/smartctl.8.in
     if out.returncode != 0:
-        stdout_msg = stdout.decode('utf-8') if stdout is not None else ''
-        stderr_msg = stderr.decode('utf-8') if stderr is not None else ''
-        print(f"WARNING: Command returned exit code {out.returncode}. Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'")
+        stdout_msg = stdout.decode("utf-8") if stdout is not None else ""
+        stderr_msg = stderr.decode("utf-8") if stderr is not None else ""
+        print(
+            f"WARNING: Command returned exit code {out.returncode}. "
+            f"Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'"
+        )
 
     return stdout.decode("utf-8"), out.returncode
 
@@ -43,18 +53,18 @@ def get_drives() -> dict:
     Returns a dictionary of devices and its types
     """
     disks = {}
-    result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
+    result, _ = run_smartctl_cmd(["smartctl", "--scan-open", "--json=c"])
     result_json = json.loads(result)
 
-    if 'devices' in result_json:
-        devices = result_json['devices']
+    if "devices" in result_json:
+        devices = result_json["devices"]
 
         # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
         devices = list(
             filter(
                 lambda x: (
-                        x.get("open_error", "")
-                        != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
+                    x.get("open_error", "")
+                    != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
                 ),
                 devices,
             )
@@ -67,9 +77,13 @@ def get_drives() -> dict:
                 # After retrieving the disk information using the bus name,
                 # replace dev with a disk ID such as "megaraid,0".
                 disk_attrs = megaraid.get_megaraid_device_info(dev, device["type"])
-                disk_attrs["type"] = megaraid.get_megaraid_device_type(dev, device["type"])
+                disk_attrs["type"] = megaraid.get_megaraid_device_type(
+                    dev, device["type"]
+                )
                 disk_attrs["bus_device"] = dev
-                disk_attrs["megaraid_id"] = megaraid.get_megaraid_device_id(device["type"])
+                disk_attrs["megaraid_id"] = megaraid.get_megaraid_device_id(
+                    device["type"]
+                )
                 dev = disk_attrs["megaraid_id"]
             else:
                 disk_attrs = get_device_info(dev)
@@ -85,16 +99,16 @@ def get_device_info(dev: str) -> dict:
     """
     Returns a dictionary of device info
     """
-    results, _ = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
+    results, _ = run_smartctl_cmd(["smartctl", "-i", "--json=c", dev])
     results = json.loads(results)
     user_capacity = "Unknown"
     if "user_capacity" in results and "bytes" in results["user_capacity"]:
         user_capacity = str(results["user_capacity"]["bytes"])
     return {
-        'model_family': results.get("model_family", "Unknown"),
-        'model_name': results.get("model_name", "Unknown"),
-        'serial_number': results.get("serial_number", "Unknown"),
-        'user_capacity': user_capacity
+        "model_family": results.get("model_family", "Unknown"),
+        "model_name": results.get("model_name", "Unknown"),
+        "serial_number": results.get("serial_number", "Unknown"),
+        "user_capacity": user_capacity,
     }
 
 
@@ -112,7 +126,9 @@ def smart_sat(dev: str) -> dict:
     Runs the smartctl command on a internal or external "sat" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(
+        ["smartctl", "-A", "-H", "-d", "sat", "--json=c", dev]
+    )
     results = json.loads(results)
 
     attributes = table_to_attributes_sat(results["ata_smart_attributes"]["table"])
@@ -128,28 +144,30 @@ def table_to_attributes_sat(data: dict) -> dict:
     """
     attributes = {}
     for metric in data:
-        code = metric['id']
-        name = metric['name']
-        value = metric['value']
+        code = metric["id"]
+        name = metric["name"]
+        value = metric["value"]
 
         # metric['raw']['value'] contains values difficult to understand for temperatures and time up
         # that's why we added some logic to parse the string value
-        value_raw = metric['raw']['string']
+        value_raw = metric["raw"]["string"]
         try:
             # example value_raw: "33" or "43 (Min/Max 39/46)"
             value_raw = int(value_raw.split()[0])
         except:
             # example value_raw: "20071h+27m+15.375s"
-            if 'h+' in value_raw:
-                value_raw = int(value_raw.split('h+')[0])
+            if "h+" in value_raw:
+                value_raw = int(value_raw.split("h+")[0])
             else:
-                print(f"Raw value of sat metric '{name}' can't be parsed. raw_string: {value_raw} "
-                      f"raw_int: {metric['raw']['value']}")
+                print(
+                    f"Raw value of sat metric '{name}' can't be parsed. raw_string: {value_raw} "
+                    f"raw_int: {metric['raw']['value']}"
+                )
                 value_raw = None
 
         attributes[name] = (int(code), value)
         if value_raw is not None:
-            attributes[f'{name}_raw'] = (int(code), value_raw)
+            attributes[f"{name}_raw"] = (int(code), value_raw)
     return attributes
 
 
@@ -158,18 +176,17 @@ def smart_nvme(dev: str) -> dict:
     Runs the smartctl command on a internal or external "nvme" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'nvme', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(
+        ["smartctl", "-A", "-H", "-d", "nvme", "--json=c", dev]
+    )
     results = json.loads(results)
 
-    attributes = {
-        'smart_passed': get_smart_status(results),
-        'exit_code': exit_code
-    }
-    data = results['nvme_smart_health_information_log']
+    attributes = {"smart_passed": get_smart_status(results), "exit_code": exit_code}
+    data = results["nvme_smart_health_information_log"]
     for key, value in data.items():
-        if key == 'temperature_sensors':
+        if key == "temperature_sensors":
             for i, _value in enumerate(value, start=1):
-                attributes[f'temperature_sensor{i}'] = _value
+                attributes[f"temperature_sensor{i}"] = _value
         else:
             attributes[key] = value
     return attributes
@@ -180,7 +197,9 @@ def smart_scsi(dev: str) -> dict:
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
-    results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
+    results, exit_code = run_smartctl_cmd(
+        ["smartctl", "-A", "-H", "-d", "scsi", "--json=c", dev]
+    )
     results = json.loads(results)
 
     attributes = results_to_attributes_scsi(results)
@@ -212,7 +231,7 @@ def collect():
     global LABELS, DRIVES, METRICS, SAT_TYPES, NVME_TYPES, SCSI_TYPES
 
     for drive, drive_attrs in DRIVES.items():
-        typ = drive_attrs['type']
+        typ = drive_attrs["type"]
         try:
             if "megaraid_id" in drive_attrs:
                 attrs = megaraid.smart_megaraid(
@@ -229,15 +248,23 @@ def collect():
 
             for key, values in attrs.items():
                 # Metric name in lower case
-                metric = 'smartprom_' + key.replace('-', '_').replace(' ', '_').replace('.', '').replace('/', '_') \
+                metric = (
+                    "smartprom_"
+                    + key.replace("-", "_")
+                    .replace(" ", "_")
+                    .replace(".", "")
+                    .replace("/", "_")
                     .lower()
+                )
 
                 # Create metric if it does not exist
                 if metric not in METRICS:
-                    desc = key.replace('_', ' ')
+                    desc = key.replace("_", " ")
                     code = hex(values[0]) if typ in SAT_TYPES else hex(values)
-                    print(f'Adding new gauge {metric} ({code})')
-                    METRICS[metric] = prometheus_client.Gauge(metric, f'({code}) {desc}', LABELS)
+                    print(f"Adding new gauge {metric} ({code})")
+                    METRICS[metric] = prometheus_client.Gauge(
+                        metric, f"({code}) {desc}", LABELS
+                    )
 
                 # Update metric
                 metric_val = values[1] if typ in SAT_TYPES else values
@@ -245,14 +272,14 @@ def collect():
                 METRICS[metric].labels(
                     drive=drive,
                     type=typ,
-                    model_family=drive_attrs['model_family'],
-                    model_name=drive_attrs['model_name'],
-                    serial_number=drive_attrs['serial_number'],
-                    user_capacity=drive_attrs['user_capacity']
+                    model_family=drive_attrs["model_family"],
+                    model_name=drive_attrs["model_name"],
+                    serial_number=drive_attrs["serial_number"],
+                    user_capacity=drive_attrs["user_capacity"],
                 ).set(metric_val)
 
         except Exception as e:
-            print('Exception:', e)
+            print("Exception:", e)
             pass
 
 
@@ -279,5 +306,5 @@ def main():
         time.sleep(refresh_interval)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
