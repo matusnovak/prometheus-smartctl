@@ -1,12 +1,13 @@
 FROM python:3.12-alpine3.19
 
-WORKDIR /usr/src
+# Install smartmontools
+RUN apk add --no-cache smartmontools
 
-RUN apk add --no-cache smartmontools \
-    && pip install prometheus_client \
+# Install Python dependencies
+COPY requirements.txt /
+RUN pip install -r /requirements.txt \
     # remove temporary files
-    && rm -rf /root/.cache/ \
-    && find / -name '*.pyc' -delete
+    && rm -rf /root/.cache
 
 COPY ./smartprom.py /megaraid.py /
 
