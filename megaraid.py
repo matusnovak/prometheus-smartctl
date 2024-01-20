@@ -30,10 +30,15 @@ def get_megaraid_device_info(dev: str, typ: str) -> dict:
         results.get("model_name", "Unknown"),
     )
 
+    user_capacity = "Unknown"
+    if "user_capacity" in results and "bytes" in results["user_capacity"]:
+        user_capacity = str(results["user_capacity"]["bytes"])
+
     return {
         "model_family": model_family,
         "model_name": model_name,
         "serial_number": serial_number,
+        "user_capacity": user_capacity,
     }
 
 

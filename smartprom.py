@@ -10,7 +10,7 @@ import prometheus_client
 
 import megaraid
 
-LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
+LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number', 'user_capacity']
 DRIVES = {}
 METRICS = {}
 
@@ -87,10 +87,14 @@ def get_device_info(dev: str) -> dict:
     """
     results, _ = run_smartctl_cmd(['smartctl', '-i', '--json=c', dev])
     results = json.loads(results)
+    user_capacity = "Unknown"
+    if "user_capacity" in results and "bytes" in results["user_capacity"]:
+        user_capacity = str(results["user_capacity"]["bytes"])
     return {
         'model_family': results.get("model_family", "Unknown"),
         'model_name': results.get("model_name", "Unknown"),
-        'serial_number': results.get("serial_number", "Unknown")
+        'serial_number': results.get("serial_number", "Unknown"),
+        'user_capacity': user_capacity
     }
 
 
@@ -238,11 +242,14 @@ def collect():
                 # Update metric
                 metric_val = values[1] if typ in SAT_TYPES else values
 
-                METRICS[metric].labels(drive=drive,
-                                       type=typ,
-                                       model_family=drive_attrs['model_family'],
-                                       model_name=drive_attrs['model_name'],
-                                       serial_number=drive_attrs['serial_number']).set(metric_val)
+                METRICS[metric].labels(
+                    drive=drive,
+                    type=typ,
+                    model_family=drive_attrs['model_family'],
+                    model_name=drive_attrs['model_name'],
+                    serial_number=drive_attrs['serial_number'],
+                    user_capacity=drive_attrs['user_capacity']
+                ).set(metric_val)
 
         except Exception as e:
             print('Exception:', e)
