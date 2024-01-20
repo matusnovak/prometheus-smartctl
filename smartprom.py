@@ -3,9 +3,12 @@ import json
 import os
 import subprocess
 import time
+import re
 from typing import Tuple
 
 import prometheus_client
+
+import megaraid
 
 LABELS = ['drive', 'type', 'model_family', 'model_name', 'serial_number']
 DRIVES = {}
@@ -42,12 +45,34 @@ def get_drives() -> dict:
     disks = {}
     result, _ = run_smartctl_cmd(['smartctl', '--scan-open', '--json=c'])
     result_json = json.loads(result)
+
+    # Ignore devices that fail on open, such as Virtual Drives created by MegaRAID.
+    result_json["devices"] = list(
+        filter(
+            lambda x: (
+                x.get("open_error", "")
+                != "DELL or MegaRaid controller, please try adding '-d megaraid,N'"
+            ),
+            result_json["devices"],
+        )
+    )
+
     if 'devices' in result_json:
         devices = result_json['devices']
         for device in devices:
             dev = device["name"]
-            disk_attrs = get_device_info(dev)
-            disk_attrs["type"] = device["type"]
+            if re.match(megaraid.MEGARAID_TYPE_PATTERN, device["type"]):
+                # If drive is connected by MegaRAID, dev has a bus name like "/dev/bus/0".
+                # After retrieving the disk information using the bus name,
+                # replace dev with a disk ID such as "megaraid,0".
+                disk_attrs = megaraid.get_megaraid_device_info(dev, device["type"])
+                disk_attrs["type"] = megaraid.get_megaraid_device_type(dev, device["type"])
+                disk_attrs["bus_device"] = dev
+                disk_attrs["megaraid_id"] = megaraid.get_megaraid_device_id(device["type"])
+                dev = disk_attrs["megaraid_id"]
+            else:
+                disk_attrs = get_device_info(dev)
+                disk_attrs["type"] = device["type"]
             disks[dev] = disk_attrs
             print("Discovered device", dev, "with attributes", disk_attrs)
     else:
@@ -85,11 +110,18 @@ def smart_sat(dev: str) -> dict:
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'sat', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {
-        'smart_passed': (0, get_smart_status(results)),
-        'exit_code': (0, exit_code)
-    }
-    data = results['ata_smart_attributes']['table']
+    attributes = table_to_attributes_sat(results["ata_smart_attributes"]["table"])
+    attributes["smart_passed"] = (0, get_smart_status(results))
+    attributes["exit_code"] = (0, exit_code)
+    return attributes
+
+
+def table_to_attributes_sat(data: dict) -> dict:
+    """
+    Returns a results["ata_smart_attributes"]["table"]
+    processed into an attributes dict
+    """
+    attributes = {}
     for metric in data:
         code = metric['id']
         name = metric['name']
@@ -146,11 +178,19 @@ def smart_scsi(dev: str) -> dict:
     results, exit_code = run_smartctl_cmd(['smartctl', '-A', '-H', '-d', 'scsi', '--json=c', dev])
     results = json.loads(results)
 
-    attributes = {
-        'smart_passed': get_smart_status(results),
-        'exit_code': exit_code
-    }
-    for key, value in results.items():
+    attributes = results_to_attributes_scsi(results)
+    attributes["smart_passed"] = get_smart_status(results)
+    attributes["exit_code"] = exit_code
+    return attributes
+
+
+def results_to_attributes_scsi(data: dict) -> dict:
+    """
+    Returns the result of smartctl -i on the SCSI device
+    processed into an attributes dict
+    """
+    attributes = {}
+    for key, value in data.items():
         if type(value) == dict:
             for _label, _value in value.items():
                 if type(_value) == int:
@@ -169,7 +209,11 @@ def collect():
     for drive, drive_attrs in DRIVES.items():
         typ = drive_attrs['type']
         try:
-            if typ in SAT_TYPES:
+            if "megaraid_id" in drive_attrs:
+                attrs = megaraid.smart_megaraid(
+                    drive_attrs["bus_device"], drive_attrs["megaraid_id"]
+                )
+            elif typ in SAT_TYPES:
                 attrs = smart_sat(drive)
             elif typ in NVME_TYPES:
                 attrs = smart_nvme(drive)
