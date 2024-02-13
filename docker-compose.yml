@@ -6,3 +6,7 @@ services:
     privileged: true
     ports:
       - 9902:9902
+    environment:
+      - SMARTCTL_POWERMODE=standby
+
+

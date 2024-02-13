@@ -6,7 +6,7 @@ import smartprom
 MEGARAID_TYPE_PATTERN = r"(sat\+)?(megaraid,\d+)"
 
 
-def get_megaraid_device_info(dev: str, typ: str) -> dict:
+def get_megaraid_device_info(dev: str, typ: str, powermode: str) -> dict:
     """
     Get device information connected with MegaRAID,
     and process the information into get_device_info compatible format.
@@ -16,7 +16,7 @@ def get_megaraid_device_info(dev: str, typ: str) -> dict:
         return {}
 
     results, _ = smartprom.run_smartctl_cmd(
-        ["smartctl", "-i", "--json=c", "-d", megaraid_id, dev]
+        ["smartctl", "-i", "--json=c", "--nocheck="+powermode, "-d", megaraid_id, dev]
     )
     results = json.loads(results)
     serial_number = results.get("serial_number", "Unknown")
@@ -42,13 +42,13 @@ def get_megaraid_device_info(dev: str, typ: str) -> dict:
     }
 
 
-def get_megaraid_device_type(dev: str, typ: str) -> str:
+def get_megaraid_device_type(dev: str, typ: str, powermode: str) -> str:
     megaraid_id = get_megaraid_device_id(typ)
     if megaraid_id is None:
         return "unknown"
 
     results, _ = smartprom.run_smartctl_cmd(
-        ["smartctl", "-i", "--json=c", "-d", megaraid_id, dev]
+        ["smartctl", "-i", "--json=c", "--nocheck="+powermode, "-d", megaraid_id, dev]
     )
     results = json.loads(results)
 
@@ -68,13 +68,13 @@ def get_megaraid_device_id(typ: str) -> str | None:
     return megaraid_match.group(2)
 
 
-def smart_megaraid(dev: str, megaraid_id: str) -> dict:
+def smart_megaraid(dev: str, megaraid_id: str, powermode: str) -> dict:
     """
     Runs the smartctl command on device connected by MegaRAID
     and processes its attributes
     """
     results, exit_code = smartprom.run_smartctl_cmd(
-        ["smartctl", "-A", "-H", "-d", megaraid_id, "--json=c", dev]
+        ["smartctl", "-A", "-H", "--nocheck="+powermode, "-d", megaraid_id, "--json=c", dev]
     )
     results = json.loads(results)
 

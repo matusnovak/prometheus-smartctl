@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/python3
 import json
 import os
 import subprocess
@@ -48,12 +48,12 @@ def run_smartctl_cmd(args: list) -> Tuple[str, int]:
     return stdout.decode("utf-8"), out.returncode
 
 
-def get_drives() -> dict:
+def get_drives(powermode:str) -> dict:
     """
     Returns a dictionary of devices and its types
     """
     disks = {}
-    result, _ = run_smartctl_cmd(["smartctl", "--scan-open", "--json=c"])
+    result, _ = run_smartctl_cmd(["smartctl", "--scan-open", "--json=c","--nocheck="+powermode])
     result_json = json.loads(result)
 
     if "devices" in result_json:
@@ -76,9 +76,9 @@ def get_drives() -> dict:
                 # If drive is connected by MegaRAID, dev has a bus name like "/dev/bus/0".
                 # After retrieving the disk information using the bus name,
                 # replace dev with a disk ID such as "megaraid,0".
-                disk_attrs = megaraid.get_megaraid_device_info(dev, device["type"])
+                disk_attrs = megaraid.get_megaraid_device_info(dev, device["type"],powermode)
                 disk_attrs["type"] = megaraid.get_megaraid_device_type(
-                    dev, device["type"]
+                    dev, device["type"], powermode
                 )
                 disk_attrs["bus_device"] = dev
                 disk_attrs["megaraid_id"] = megaraid.get_megaraid_device_id(
@@ -86,7 +86,7 @@ def get_drives() -> dict:
                 )
                 dev = disk_attrs["megaraid_id"]
             else:
-                disk_attrs = get_device_info(dev)
+                disk_attrs = get_device_info(dev,powermode)
                 disk_attrs["type"] = device["type"]
             disks[dev] = disk_attrs
             print("Discovered device", dev, "with attributes", disk_attrs)
@@ -95,11 +95,11 @@ def get_drives() -> dict:
     return disks
 
 
-def get_device_info(dev: str) -> dict:
+def get_device_info(dev: str, powermode: str) -> dict:
     """
     Returns a dictionary of device info
     """
-    results, _ = run_smartctl_cmd(["smartctl", "-i", "--json=c", dev])
+    results, _ = run_smartctl_cmd(["smartctl", "-i", "--json=c", "--nocheck="+powermode, dev])
     results = json.loads(results)
     user_capacity = "Unknown"
     if "user_capacity" in results and "bytes" in results["user_capacity"]:
@@ -121,13 +121,13 @@ def get_smart_status(results: dict) -> int:
     return +(status.get("passed")) if status is not None else -1
 
 
-def smart_sat(dev: str) -> dict:
+def smart_sat(dev: str, powermode: str) -> dict:
     """
     Runs the smartctl command on a internal or external "sat" device
     and processes its attributes
     """
     results, exit_code = run_smartctl_cmd(
-        ["smartctl", "-A", "-H", "-d", "sat", "--json=c", dev]
+        ["smartctl", "-A", "-H", "-d", "sat", "--json=c", "--nocheck="+powermode, dev]
     )
     results = json.loads(results)
 
@@ -171,13 +171,13 @@ def table_to_attributes_sat(data: dict) -> dict:
     return attributes
 
 
-def smart_nvme(dev: str) -> dict:
+def smart_nvme(dev: str, powermode: str) -> dict:
     """
     Runs the smartctl command on a internal or external "nvme" device
     and processes its attributes
     """
     results, exit_code = run_smartctl_cmd(
-        ["smartctl", "-A", "-H", "-d", "nvme", "--json=c", dev]
+        ["smartctl", "-A", "-H", "-d", "nvme", "--json=c", "--nocheck="+powermode, dev]
     )
     results = json.loads(results)
 
@@ -192,13 +192,13 @@ def smart_nvme(dev: str) -> dict:
     return attributes
 
 
-def smart_scsi(dev: str) -> dict:
+def smart_scsi(dev: str, powermode: str) -> dict:
     """
     Runs the smartctl command on a "scsi" device
     and processes its attributes
     """
     results, exit_code = run_smartctl_cmd(
-        ["smartctl", "-A", "-H", "-d", "scsi", "--json=c", dev]
+        ["smartctl", "-A", "-H", "-d", "scsi", "--json=c", "--nocheck="+powermode, dev]
     )
     results = json.loads(results)
 
@@ -224,7 +224,7 @@ def results_to_attributes_scsi(data: dict) -> dict:
     return attributes
 
 
-def collect():
+def collect(powermode:str):
     """
     Collect all drive metrics and save them as Gauge type
     """
@@ -235,14 +235,14 @@ def collect():
         try:
             if "megaraid_id" in drive_attrs:
                 attrs = megaraid.smart_megaraid(
-                    drive_attrs["bus_device"], drive_attrs["megaraid_id"]
+                    drive_attrs["bus_device"], drive_attrs["megaraid_id"],powermode
                 )
             elif typ in SAT_TYPES:
-                attrs = smart_sat(drive)
+                attrs = smart_sat(drive,powermode)
             elif typ in NVME_TYPES:
-                attrs = smart_nvme(drive)
+                attrs = smart_nvme(drive,powermode)
             elif typ in SCSI_TYPES:
-                attrs = smart_scsi(drive)
+                attrs = smart_scsi(drive,powermode)
             else:
                 continue
 
@@ -294,15 +294,22 @@ def main():
     exporter_port = int(os.environ.get("SMARTCTL_EXPORTER_PORT", 9902))
     refresh_interval = int(os.environ.get("SMARTCTL_REFRESH_INTERVAL", 60))
 
+    # Powermode determines how smartctl behaves with powered down / sleeping devices.
+    # Valid values are: never,sleep,standby,idle
+    # standby is the value you probably want when you want to avoid spinning up HDD's.
+    # See smartctl man page for more info.
+    smartctl_powermode = os.environ.get("SMARTCTL_POWERMODE","never")
+
     # Get drives (test smartctl)
-    DRIVES = get_drives()
+    DRIVES = get_drives(smartctl_powermode)
 
     # Start Prometheus server
     prometheus_client.start_http_server(exporter_port, exporter_address)
     print(f"Server listening in http://{exporter_address}:{exporter_port}/metrics")
+    print(f"Using smartctl powermode: {smartctl_powermode}")
 
     while True:
-        collect()
+        collect(smartctl_powermode)
         time.sleep(refresh_interval)
 
 
