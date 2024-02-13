@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v2
 
       - name: Downcase repo
-        run: echo REPOSITORY=dutchkarma/prometheus-smartctl >> $GITHUB_ENV
+        run: echo REPOSITORY=matusnovak/prometheus-smartctl >> $GITHUB_ENV
 
       - name: Docker metadata
         id: docker_metadata
