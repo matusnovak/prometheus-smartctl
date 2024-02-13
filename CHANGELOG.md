@@ -1,5 +1,6 @@
 # Changelog
 
+
 ## v2.3.0 (20/01/2024)
 
 * Add support for drives connected by MegaRAID
