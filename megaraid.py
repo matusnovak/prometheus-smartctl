@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Optional
 
 import smartprom
 
@@ -57,7 +58,7 @@ def get_megaraid_device_type(dev: str, typ: str) -> str:
     return "sat" if results["device"]["protocol"] == "ATA" else "scsi"
 
 
-def get_megaraid_device_id(typ: str) -> str | None:
+def get_megaraid_device_id(typ: str) -> Optional[str]:
     """
     Returns the device ID on the MegaRAID from the typ string
     """
