@@ -38,6 +38,36 @@ services:
     restart: unless-stopped
 ```
 
+Example docker-compose.yml with node-exporter and file export:
+
+
+```yml
+version: "3"
+services:
+    node-exporter:
+        image: quay.io/prometheus/node-exporter
+        restart: always
+        volumes:
+            - '/:/host:ro,rslave'
+            - './tmp/:/tmp/'
+        network_mode: "host"
+        pid: "host"
+        command:
+            - "--path.rootfs=/host"
+            - "--collector.textfile.directory=/tmp/"
+    smartctl-exporter:
+      image: matusnovak/prometheus-smartctl:latest
+      container_name: smartctl-exporter
+      privileged: true
+      environment:
+        - "SMARTCTL_METRICS_FILE_ENABLE=True"
+      volumes:
+        - ./tmp/:/metrics/
+      restart: unless-stopped
+```
+
+
+
 Your metrics will be available at <http://localhost:9902/metrics>
 
 The exported metrics looks like these:
@@ -68,6 +98,8 @@ All configuration is done with environment variables.
 - `SMARTCTL_REFRESH_INTERVAL`: (Optional) The refresh interval of the metrics. A larger value reduces CPU usage. The default is `60` seconds.
 - `SMARTCTL_EXPORTER_PORT`: (Optional) The address the exporter should listen on. The default is `9902`.
 - `SMARTCTL_EXPORTER_ADDRESS`: (Optional) The address the exporter should listen on. The default is to listen on all addresses.
+- `SMARTCTL_METRICS_FILE_ENABLE`: (Optional) To enable metrics file, if you have a node exporter running anyway, you can simply read out this file . The default is `False`.
+- `SMARTCTL_METRICS_FILE_PATH`: (Optional) the path, this must then also be specified in the docker-compose as volume. The default is `/metrics/`.
 
 ## Grafana dashboard
 
