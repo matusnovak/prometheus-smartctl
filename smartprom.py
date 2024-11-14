@@ -293,6 +293,8 @@ def main():
     exporter_address = os.environ.get("SMARTCTL_EXPORTER_ADDRESS", "0.0.0.0")
     exporter_port = int(os.environ.get("SMARTCTL_EXPORTER_PORT", 9902))
     refresh_interval = int(os.environ.get("SMARTCTL_REFRESH_INTERVAL", 60))
+    metrics_file_enable = os.environ.get("SMARTCTL_METRICS_FILE_ENABLE", False)
+    metrics_file_path = os.environ.get("SMARTCTL_METRICS_FILE_PATH", "/metrics/")
 
     # Get drives (test smartctl)
     DRIVES = get_drives()
@@ -303,6 +305,8 @@ def main():
 
     while True:
         collect()
+        if metrics_file_enable:
+            prometheus_client.write_to_textfile(metrics_file_path+"smartctl.prom", prometheus_client.REGISTRY)
         time.sleep(refresh_interval)
 
 
