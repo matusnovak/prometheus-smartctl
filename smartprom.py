@@ -5,10 +5,14 @@ import subprocess
 import time
 import re
 from typing import Tuple
+import logging
 
 import prometheus_client
 
 import megaraid
+
+logging.basicConfig(level=os.environ.get("LOGLEVEL", "INFO"))
+logger = logging.getLogger(__name__)
 
 LABELS = [
     "drive",
@@ -40,10 +44,12 @@ def run_smartctl_cmd(args: list) -> Tuple[str, int]:
     if out.returncode != 0:
         stdout_msg = stdout.decode("utf-8") if stdout is not None else ""
         stderr_msg = stderr.decode("utf-8") if stderr is not None else ""
-        print(
-            f"WARNING: Command returned exit code {out.returncode}. "
+        logger.warning(
+            f"Command returned exit code {out.returncode}. "
             f"Stdout: '{stdout_msg}' Stderr: '{stderr_msg}'"
         )
+
+    logger.debug(f"Smartctl returned: {stdout.decode('utf-8')}")
 
     return stdout.decode("utf-8"), out.returncode
 
@@ -89,9 +95,9 @@ def get_drives() -> dict:
                 disk_attrs = get_device_info(dev)
                 disk_attrs["type"] = device["type"]
             disks[dev] = disk_attrs
-            print("Discovered device", dev, "with attributes", disk_attrs)
+            logger.info(f"Discovered device {dev} with attributes {disk_attrs}")
     else:
-        print("No devices found. Make sure you have enough privileges.")
+        logger.info("No devices found. Make sure you have enough privileges.")
     return disks
 
 
@@ -159,7 +165,7 @@ def table_to_attributes_sat(data: dict) -> dict:
             if "h+" in value_raw:
                 value_raw = int(value_raw.split("h+")[0])
             else:
-                print(
+                logger.warning(
                     f"Raw value of sat metric '{name}' can't be parsed. raw_string: {value_raw} "
                     f"raw_int: {metric['raw']['value']}"
                 )
@@ -247,6 +253,9 @@ def collect():
                 continue
 
             for key, values in attrs.items():
+                if values is None or values == []:
+                    logger.warning(f"No values for {key} in {drive}")
+                    continue
                 # Metric name in lower case
                 metric = (
                     "smartprom_"
@@ -261,7 +270,7 @@ def collect():
                 if metric not in METRICS:
                     desc = key.replace("_", " ")
                     code = hex(values[0]) if typ in SAT_TYPES else hex(values)
-                    print(f"Adding new gauge {metric} ({code})")
+                    logger.info(f"Adding new gauge {metric} ({code})")
                     METRICS[metric] = prometheus_client.Gauge(
                         metric, f"({code}) {desc}", LABELS
                     )
@@ -279,7 +288,7 @@ def collect():
                 ).set(metric_val)
 
         except Exception as e:
-            print("Exception:", e)
+            logger.exception(f"Exception: {e}")
             pass
 
 
